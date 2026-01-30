@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import requests
 import yaml
-from lambdawaker.templete.render_parallel import run_dispatcher
+from lambdawaker.template.render_parallel import run_dispatcher
 
 
 def fetch_dataset_size(base_url) -> int:

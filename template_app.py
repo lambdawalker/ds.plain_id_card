@@ -1,4 +1,4 @@
-from lambdawaker.templete.server.TemplateServer import TemplateServer
+from lambdawaker.template.server.TemplateServer import TemplateServer
 
 server = TemplateServer(
     "./templates",
