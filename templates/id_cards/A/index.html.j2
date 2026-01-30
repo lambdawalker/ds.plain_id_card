@@ -14,17 +14,17 @@
             <div class="title-section">
                 <h1>{{ gen.text.word(4) }}</h1>
                 {% if gen.random.boolean() %}
-                    <h2>{{ common.id.type }}</h2>
+                    <h2>{{ gen.text.word(4) }}</h2>
                 {% endif %}
             </div>
         </header>
         <main class="card-body">
             <div class="photo-section">
-                <img class="main-photo" src="/ds/lambdaWalker/ds.photo_id/body/{{ data.id }}/image" data-capture="true" alt="Photo">
+                <img class="main-photo" src="/ds/lambdaWalker/ds.photo_id/body/{{ data.id }}/image" data-class="photo" alt="Photo">
             </div>
             <div class="data-section">
                 <div class="small-photo-container">
-                    <img class="small-photo" src="/ds/lambdaWalker/ds.photo_id/body/{{ data.id }}/image" data-capture="true" alt="Photo">
+                    <img class="small-photo" src="/ds/lambdaWalker/ds.photo_id/body/{{ data.id }}/image" data-class="photo" alt="Photo">
                 </div>
 
                 <div class="data-group top-right">
