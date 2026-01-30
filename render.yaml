@@ -1,0 +1,8 @@
+worker_load_percent: 70
+grid_cols: 8
+refresh_hz: 24.0
+max_retries: 3
+base_url: "http://127.0.0.1:8000"
+limit: null
+outdir: "./output/img/"
+headless: true

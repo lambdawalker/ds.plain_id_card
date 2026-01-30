@@ -1,0 +1,1 @@
+uvicorn template_app:app --workers 48
