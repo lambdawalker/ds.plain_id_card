@@ -1,0 +1,36 @@
+.title-section {
+    display: flex;
+    flex-direction: row;
+}
+
+.title-section > div {
+    flex: 1;
+}
+
+p span {
+    font-size: .7em;
+}
+
+.middle, .bottom-row {
+    font-size: .9em;
+    margin-top: 3em;
+}
+
+.bottom-row .label {
+    font-size: .8em;
+    font-weight: bold;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    text-align: left;
+}
+
+.title > * {
+    text-align: {{ ["left", "center", "right"] |random }};
+}
+
+.small-photo {
+    right: {{ (range(5, 25) | random) }}mm;
+    top: {{ range(0, 25) | random }}mm;
+}
+

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>INE Credencial (Simulación)</title>
+    <link rel="stylesheet" href="../_common_/base.css.j2">
+    <link rel="stylesheet" href="style.css.j2">
+</head>
+<body>
+<div id="view-port">
+    <div class="card">
+        <header class="card-header">
+            <div class="title-section">
+                <div class="state">
+                    {% if gen.random.boolean() %}
+                        <h4>{{ gen.text.sentence((1,3)) }}</h4>
+                    {% endif %}
+                    <h1>{{ gen.text.word((2,4)) }}</h1>
+                    <h3>{{ gen.text.sentence((2,3)) }}</h3>
+                </div>
+                <div class="title">
+                    <h2>{{ gen.text.sentence((1,3)) }}</h2>
+                    {% if gen.random.boolean() %}
+                        <h4>{{ gen.text.sentence((1,3)) }}</h4>
+                    {% endif %}
+                </div>
+            </div>
+        </header>
+        <main class="card-body">
+            <div class="data-section">
+                <div class="small-photo-container">
+                    <img class="small-photo" src="/ds/lambdaWalker/ds.photo_id/body/{{ data.id }}/image" data-capture="true" alt="Photo">
+                </div>
+                <div class="data-item name">
+                    <p>{{ gen.text.sentence((1,3), p=False) }}</p>
+                    <p>{{ gen.text.sentence((1,2), p=False) }}</p>
+                </div>
+
+                <div class="data-item middle">
+                    <p><span>{{ gen.text.letter() }}.</span> {{ gen.address.number().data }} {{ gen.text.sentence((1,3), p=False) }}</p>
+                    <p><span>{{ gen.text.letter() }}.</span> {{ gen.address.block().data }} {{ gen.address.number().data }} </p>
+                    <p><span>{{ gen.text.letter() }}.</span> {{ gen.address.city().data }}, {{ gen.address.state().data }}</p>
+                </div>
+
+                <div class="data-group bottom-row">
+                    {% for i in range(6) %}
+                        <div class="data-item">
+                            <label>{{ gen.text.word((1,3)) }}</label>
+                            <p>{{ gen.text.word((1,3)) }}</p>
+                        </div>
+                    {% endfor %}
+                </div>
+
+                <div class="data-item key-curp">
+                    <div class="curp">
+                        <label>{{ gen.text.word((2,4)) }}</label>
+                        <span>{{ gen.random.hex(18) }}</span>
+                    </div>
+                    <div class="year">
+                        <label>{{ gen.text.word((2,4)) }}</label>
+                        <span>{{ gen.time.year_as_number().data }}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="photo-section">
+                <img class="main-photo" src="/ds/lambdaWalker/ds.photo_id/body/{{ data.id }}/image" data-capture="true" alt="Photo">
+            </div>
+        </main>
+    </div>
+</div>
+</body>
+</html>

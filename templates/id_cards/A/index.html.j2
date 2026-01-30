@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>INE Credencial (Simulación)</title>
+    <link rel="stylesheet" href="../_common_/base.css.j2">
+    <link rel="stylesheet" href="style.css.j2">
+</head>
+<body>
+<div id="view-port">
+    <div class="card">
+        <header class="card-header">
+            <div class="title-section">
+                <h1>{{ gen.text.word(4) }}</h1>
+                {% if gen.random.boolean() %}
+                    <h2>{{ common.id.type }}</h2>
+                {% endif %}
+            </div>
+        </header>
+        <main class="card-body">
+            <div class="photo-section">
+                <img class="main-photo" src="/ds/lambdaWalker/ds.photo_id/body/{{ data.id }}/image" data-capture="true" alt="Photo">
+            </div>
+            <div class="data-section">
+                <div class="small-photo-container">
+                    <img class="small-photo" src="/ds/lambdaWalker/ds.photo_id/body/{{ data.id }}/image" data-capture="true" alt="Photo">
+                </div>
+
+                <div class="data-group top-right">
+                    <div class="data-item date">
+                        <label>{{ gen.text.word((2,4)) }}</label>
+                        <p>{{ gen.time.date().data }}</p>
+                    </div>
+                    <div class="data-item sex">
+                        <label>{{ gen.text.word((2,4)) }}</label>
+                        <p>{{ gen.text.word((1,2)) }}</p>
+                    </div>
+                </div>
+
+                <div class="data-item name">
+                    <label>{{ gen.text.word((2,4)) }}</label>
+                    <p>{{ gen.text.sentence((1,3), p=False) }}</p>
+                    <p>{{ gen.text.sentence((1,2), p=False) }}</p>
+                </div>
+
+                <div class="data-item address">
+                    <label>{{ gen.text.word((2,4)) }}</label>
+                    <p>{{ gen.text.word((3,6)) }} #{{ gen.address.number().data }}</p>
+                    <p>{{ gen.address.block().data }}. {{ gen.address.number().data }} </p>
+                    <p>{{ gen.address.city().data }}, {{ gen.address.state().data }}</p>
+                </div>
+
+                <div class="data-item key-voter">
+                    <div class="key">
+                        <label>{{ gen.text.word((2,4)) }}</label>
+                        <span>{{ gen.random.hex(18) }}</span>
+                    </div>
+                </div>
+
+                <div class="data-item key-curp">
+                    <div class="curp">
+                        <label>{{ gen.text.word((2,4)) }}</label>
+                        <span>{{ gen.random.hex(18) }}</span>
+                    </div>
+                    <div class="year">
+                        <label>{{ gen.text.word((2,4)) }}</label>
+                        <span>{{ gen.time.year_as_number().data }}</span>
+                    </div>
+                </div>
+
+                <div class="data-group bottom-row">
+
+                    <div class="data-item state">
+                        <label>{{ gen.text.word((2,4)) }}</label>
+                        <span>{{ gen.random.lf_number(1,99) }}</span>
+                    </div>
+                    <div class="data-item municipio">
+                        <label>{{ gen.text.word((2,4)) }}</label>
+                        <span>{{ gen.random.lf_number(1,99) }}</span>
+                    </div>
+                    <div class="data-item seccion">
+                        <label>{{ gen.text.word((2,4)) }}</label>
+                        <span>{{ gen.random.lf_number(1,99) }}</span>
+                    </div>
+                    <div class="data-item localidad">
+                        <label>{{ gen.text.word((2,4)) }}</label>
+                        <span>{{ gen.random.lf_number(1,99) }}</span>
+                    </div>
+                    <div class="data-item emision">
+                        <label>{{ gen.text.word((2,4)) }}</label>
+                        <span>{{ gen.time.year_as_number().data }}</span>
+                    </div>
+                    <div class="data-item vigencia">
+                        <label>{{ gen.text.word((2,4)) }}</label>
+                        <span>{{ gen.time.year_as_number().data }}</span>
+                    </div>
+
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "labels": {
+    "name": "Nombre",
+    "birth_date": "Fecha de nacimiento",
+    "sex": "Sexo",
+    "address": "Domicilio",
+    "voter_key": "Clave de elector",
+    "curp": "CURP",
+    "registration_year": "Ano de registro",
+    "state": "Estado",
+    "municipality": "Municipio",
+    "section": "Seccion",
+    "locality": "Localidad",
+    "issued": "Emision",
+    "valid_until": "Vigencia"
+  },
+  "id": {
+    "type": "CREDENCIAL PARA VOTAR"
+  }
+}
