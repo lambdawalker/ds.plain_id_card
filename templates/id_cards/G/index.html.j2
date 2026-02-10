@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="../_common_/card.css.j2">
+    <link rel="stylesheet" href="style.css.j2">
+</head>
+<body>
+<div id="view-port">
+    <div class="card">
+        <header>
+            <span class="small-text">{{ gen.text.sentence((3,6)) }}</span>
+            <img class="barcode" src="/ds/lambdaWalker/ds.machineReadableCode/body/{{ data.id }}/slim_barcode" data-class="photo" alt="Barcode">
+        </header>
+
+        <main>
+            {% if gen.random.boolean() %}
+                <p class="small-text">{{ gen.text.sentence((3,7)) }}</p>
+            {% endif %}
+
+            <div class="photo-container">
+                <img class="photo" src="/ds/lambdaWalker/ds.photo_id/body/{{ data.id }}/image" data-class="photo" alt="Photo">
+                <div class="photo-text">
+                    {% if gen.random.boolean() %}
+                        {% for i in range([2, 3] | random) %}
+                            <p class="small-text">{{ gen.text.sentence((6,10)) }}</p>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+        </main>
+        <p class="sep-line">
+            <span class="embedded">{{ gen.text.word((1,2)) }}</span>
+            {{ gen.text.sentence((6,8)) }}
+        </p>
+        <footer>
+            <p class="mrz-text">{{ gen.random.mrz() | e }}</p>
+        </footer>
+    </div>
+</div>
+</body>
+</html>

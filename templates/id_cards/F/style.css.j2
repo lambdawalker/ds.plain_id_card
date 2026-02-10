@@ -1,0 +1,81 @@
+{# Logic: Define variables at the top #}
+{%- set fonts = ['Arial', 'Verdana', 'Georgia', 'Courier New', 'Brush Script MT'] -%}
+{%- set flex_dir = ['row', 'row-reverse'] | random -%}
+{%- set main_dir = ['column', 'column-reverse'] | random -%}
+{%- set footer_dir = ['row', 'column', 'row-reverse'] | random -%}
+{%- set scale = (range(100, 115) | random) / 100 -%}
+{%- set footer_gap = range(2, 8) | random -%}
+
+#view-port {
+    display: inline-block;
+}
+
+
+body {
+    color: {{ env.theme.text_color.to_rgb_hex() if env.theme.text_color else '#000' }};
+    font-family: {{ fonts | random }};
+}
+
+.card {
+    margin: 0;
+    padding: 0;
+    border: none;
+
+    width: 357mm;
+    height: 213mm;
+
+
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+}
+
+.card > div {
+    padding:0 10mm;
+    height: 140mm;
+    display: flex;
+    align-items: center;
+    flex-direction: {{ flex_dir }};
+}
+
+main {
+    height: 100%;
+    flex-grow: 1;
+    display: flex;
+    /* Randomly flips content vertically (Top-to-Bottom vs Bottom-to-Top) */
+    flex-direction: {{ main_dir }};
+    overflow: hidden;
+}
+
+.pdf417 {
+    width: {{ 150 * scale }}mm;
+    height: {{ 30 * scale }}mm;
+    /* Ensures it doesn't warp if the container flips */
+    object-fit: contain;
+}
+
+.barcode {
+    writing-mode: vertical-rl;
+    transform: rotate(90deg) scale({{ scale }});
+    height: 30mm;
+    flex-shrink: 0;
+}
+
+.extra-text {
+    margin: 5mm; /* Balanced margin for random directions */
+    flex-grow: 1;
+}
+
+.footer {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-grow: 1;
+    flex-direction: {{ footer_dir }};
+    gap: {{ footer_gap }}mm;
+}
+
+p {
+    margin-block-start: .4em;
+    margin-block-end: .4em;
+}

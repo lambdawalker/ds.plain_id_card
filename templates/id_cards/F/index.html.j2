@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="../_common_/card.css.j2">
+    <link rel="stylesheet" href="style.css.j2">
+</head>
+<body>
+<div id="view-port">
+    <div class="card">
+        <div>
+            <img class="barcode" src="/ds/lambdaWalker/ds.machineReadableCode/body/{{ data.id }}/barcode" data-class="photo" alt="Barcode">
+
+            <main>
+                {% if gen.random.boolean() %}
+                    <h2>{{ gen.text.sentence((3,10)) }}</h2>
+                {% endif %}
+
+                {% for i in range([2, 3] | random) %}
+                    <p>{{ gen.text.sentence((6,20)) }}</p>
+                {% endfor %}
+
+                <div class="footer">
+                    <img class="pdf417" src="/ds/lambdaWalker/ds.machineReadableCode/body/{{ data.id }}/pdf417" data-class="photo" alt="PDF417">
+                    <div class="extra-text">
+                        {% for i in range([2, 3] | random) %}
+                            <p>{{ gen.text.sentence((6,30)) }}</p>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <p>{{ gen.text.sentence((6,30)) }}</p>
+            </main>
+        </div>
+    </div>
+</div>
+</body>
+</html>
