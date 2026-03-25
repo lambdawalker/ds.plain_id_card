@@ -12,7 +12,7 @@
         <header>
             <span class="small-text">{{ gen.text.sentence((3,6)) }}</span>
             {%- if gen.random.boolean() %}
-            <img class="slim-barcode" src="/ds/lambdaWalker/ds.machineReadableCode/body/{{ data.id }}/slim_barcode" data-class="slim-barcode" alt="Barcode">
+            <img class="slim-barcode" src="/ds/lambdaWalker/ds.machineReadableCode/body/{{ data.id }}/slim_barcode" data-class="barcode" alt="Barcode">
             {% endif %}
         </header>
 
@@ -44,8 +44,8 @@
         </p>
         <footer>
             {%- if gen.random.boolean() %}
-                <p data-class="mrz" class="mrz-text">{{ gen.random.mrz() | e }}</p>
             {% else %}
+                <p data-class="mrz-text" class="mrz-text">{{ gen.random.mrz() | e }}</p>
                 <img class="barcode" src="/ds/lambdaWalker/ds.machineReadableCode/body/{{ data.id }}/barcode" data-class="barcode" alt="barcode">
             {% endif %}
         </footer>
