@@ -1,1 +1,1 @@
-uvicorn template_app:app --workers 16
+uvicorn template_app:app --workers 32

@@ -87,7 +87,7 @@ def main():
         tasks=tasks,
         worker_class=MyWorker,
         worker_scale=.6,
-        session_id="quickstart_session",
+        session_id="render",
         force=True
     )
 
