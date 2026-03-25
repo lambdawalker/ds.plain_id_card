@@ -1,10 +1,10 @@
-from lambdawaker.template.server.TemplateServer import TemplateServer
+from lambdawalker.template.server.TemplateServer import TemplateServer
 
 server = TemplateServer(
     "./templates",
     [
-        "@DS/ds.idPhoto",
-        "@DS/ds.machineReadableCode"
+        "@DS/ds.photo_id",
+        "@DS/ds.machine_readable_code"
     ]
 )
 
