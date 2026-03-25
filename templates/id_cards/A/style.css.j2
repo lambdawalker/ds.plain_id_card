@@ -1,4 +1,26 @@
+.data-section {
+    display: flex;
+    flex-direction: {{ ["column", "column-reverse"] | random }};;
+}
+
+.name-holder {
+    display: flex;
+    align-items: center;
+    justify-items: stretch;
+    flex-direction: {{ ["row", "row-reverse"] | random }};
+}
+
+.name-holder > div {
+    flex-grow: 1;
+}
+
+{%- set direction = [0,1] | random -%}
 
 
+.card-body {
+    flex-direction: {{ ["row", "row-reverse"][direction] }};
+}
 
-
+.small-photo {
+    {{ ["right", "left"][direction] }}: {{ (range(5, 100) | random) }}mm;
+}

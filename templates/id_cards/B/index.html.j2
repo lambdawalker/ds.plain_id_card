@@ -27,15 +27,16 @@
                 </div>
             </div>
         </header>
+        <div class="small-photo-container">
+            {% if gen.random.boolean() %}
+                <img class="small-photo" src="/ds/lambdaWalker/ds.photo_id/body/{{ data.id }}/image" data-class="photo" alt="Photo">
+            {% endif %}
+        </div>
         <main class="card-body">
             <div class="photo-section">
                 <img class="main-photo" src="/ds/lambdaWalker/ds.photo_id/body/{{ data.id }}/image" data-class="photo" alt="Photo">
             </div>
             <div class="data-section">
-                <div class="small-photo-container">
-                    <img class="small-photo" src="/ds/lambdaWalker/ds.photo_id/body/{{ data.id }}/image" data-class="photo" alt="Photo">
-                </div>
-
                 <div class="data-item name">
                     <p>{{ gen.text.sentence((1,3), p=False) }}</p>
                     <p>{{ gen.text.sentence((1,2), p=False) }}</p>

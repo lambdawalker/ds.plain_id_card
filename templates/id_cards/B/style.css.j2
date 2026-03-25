@@ -29,6 +29,31 @@ h1, h2, h3, h4, h5, h6 {
     text-align: {{ ["left", "center", "right"] |random }};
 }
 
+.data-section {
+    display: flex;
+    flex-direction: {{ ["column", "column-reverse"] | random }};;
+}
 
+.name-holder {
+    display: flex;
+    align-items: center;
+    justify-items: stretch;
+    flex-direction: {{ ["row", "row-reverse"] | random }};
+}
+
+.name-holder > div {
+    flex-grow: 1;
+}
+
+{%- set direction = [0,1] | random -%}
+
+
+.card-body {
+    flex-direction: {{ ["row", "row-reverse"][direction] }};
+}
+
+.small-photo {
+    {{ ["right", "left"][direction] }}: {{ (range(5, 100) | random) }}mm;
+}
 
 

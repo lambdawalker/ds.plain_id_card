@@ -5,6 +5,8 @@
 {%- set footer_dir = ['row', 'column', 'row-reverse'] | random -%}
 {%- set scale = (range(100, 115) | random) / 100 -%}
 {%- set footer_gap = range(2, 8) | random -%}
+{%- set qrcode_scale = (range(60, 100) | random) / 100 -%}
+{%- set qrcode_space_scale = (range(10, 100) | random) / 100 -%}
 
 #view-port {
     display: inline-block;
@@ -54,11 +56,15 @@ main {
     object-fit: contain;
 }
 
-.barcode {
+.barcode, .slim-barcode {
     writing-mode: vertical-rl;
-    transform: rotate(90deg) scale({{ scale }});
+    transform: rotate({{ ["", "-"] | random }}90deg) scale({{ scale }});
     height: 30mm;
     flex-shrink: 0;
+}
+
+.slim-barcode {
+    height: 8mm;
 }
 
 .extra-text {
@@ -78,4 +84,10 @@ main {
 p {
     margin-block-start: .4em;
     margin-block-end: .4em;
+}
+
+.qrcode {
+    width: {{ 50 * qrcode_scale }}mm;
+    height: {{ 50 * qrcode_scale }}mm;
+    display: inline-block;
 }

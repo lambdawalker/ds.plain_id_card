@@ -1,79 +1,48 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>INE Credencial (Simulación)</title>
-    <link rel="stylesheet" href="../_common_/base.css.j2">
+    <link rel="stylesheet" href="../_common_/card.css.j2">
     <link rel="stylesheet" href="style.css.j2">
 </head>
 <body>
 <div id="view-port">
     <div class="card">
-        <header class="card-header">
-            <div class="title-section">
-                <div class="title">
-                    <h3>{{ gen.text.sentence((1,3)) }}</h3>
+        <header>
+            <span class="small-text">{{ gen.text.sentence((3,6)) }}</span>
+            <img class="barcode" src="/ds/lambdaWalker/ds.machineReadableCode/body/{{ data.id }}/slim_barcode" data-class="slim-barcode" alt="slim-barcode">
+        </header>
+
+        <main>
+            {% if gen.random.boolean() %}
+                <p class="small-text">{{ gen.text.sentence((3,7)) }}</p>
+            {% endif %}
+
+            <div class="photo-container">
+                <img class="photo" src="/ds/lambdaWalker/ds.machineReadableCode/body/{{ data.id }}/pdf417" data-class="pdf417" alt="pdf417">
+                <div class="photo-text">
                     {% if gen.random.boolean() %}
-                        <h4>{{ gen.text.sentence((1,3)) }}</h4>
+                        {% for i in range([2, 3] | random) %}
+                            <p class="small-text">{{ gen.text.sentence((6,10)) }}</p>
+                        {% endfor %}
                     {% endif %}
                 </div>
             </div>
-        </header>
-        <main class="card-body">
-            <div class="data-section">
-                <img class="main-photo" src="/ds/lambdaWalker/ds.photo_id/body/{{ data.id }}/image" data-class="photo" alt="Photo">
-
-                <div class="data-item name">
-                    <p>{{ gen.text.sentence((1,3), p=False) }}</p>
-                    <p>{{ gen.text.sentence((1,2), p=False) }}</p>
-                </div>
-
-                <div class="data-item middle">
-                    <p>{{ gen.address.number().data }} {{ gen.text.sentence((1,3), p=False) }}</p>
-                    <p>{{ gen.address.block().data }} {{ gen.address.number().data }} </p>
-                    <p>{{ gen.address.city().data }}, {{ gen.address.state().data }}</p>
-                </div>
-                <div class="data-group bottom-row">
-                    {% for i in range(6) %}
-                        <div class="data-item">
-                            <label>{{ gen.text.word((1,3)) }}</label>
-                            <p>{{ gen.text.word((1,3)) }}</p>
-                        </div>
-                    {% endfor %}
-                </div>
-
-                <div class="data-item key-curp">
-                    <div class="curp">
-                        <label>{{ gen.text.word((2,4)) }}</label>
-                        <span>{{ gen.random.hex(18) }}</span>
-                    </div>
-                    <div class="year">
-                        <label>{{ gen.text.word((2,4)) }}</label>
-                        <span>{{ gen.time.year_as_number().data }}</span>
-                    </div>
-                    <div class="year">
-                        <label>{{ gen.text.word((2,4)) }}</label>
-                        <span>{{ gen.time.year_as_number().data }}</span>
-                    </div>
-                </div>
-
-                <div class="data-group bottom-row">
-                    {% for i in range(3) %}
-                        <div class="data-item">
-                            <label>{{ gen.text.word((1,3)) }}</label>
-                            <p>{{ gen.text.word((1,3)) }}</p>
-                        </div>
-                    {% endfor %}
-                </div>
-
-                <div class="data-item middle">
-                    <p><span>{{ gen.text.letter() }}.</span> {{ gen.address.number().data }} {{ gen.text.sentence((1,3), p=False) }}</p>
-                    <p><span>{{ gen.text.letter() }}.</span> {{ gen.address.block().data }} {{ gen.address.number().data }} </p>
-                </div>
-
-            </div>
         </main>
+        <p class="sep-line">
+            <span class="embedded">{{ gen.text.word((1,2)) }}</span>
+            {{ gen.text.sentence((6,8)) }}
+        </p>
+        <footer>
+            {%- if gen.random.boolean() %}
+                <p class="mrz-text" data-class="mrz-text">{{ gen.random.mrz() | e }}</p>
+            {% else %}
+                {% for i in range([1,2,3] | random) %}
+                    <img class="qrcode" src="/ds/lambdaWalker/ds.machineReadableCode/body/{{ data.id }}/qrcode" data-class="qrcode" alt="qrcode">
+                {% endfor %}
+            {% endif -%}
+        </footer>
     </div>
 </div>
 </body>

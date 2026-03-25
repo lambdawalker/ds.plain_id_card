@@ -1,58 +1,135 @@
-.card {
-    width: 196mm; /* Approximate ID card width */
-    height: 340mm; /* Approximate ID card height */
-}
+{# Define randomization variables #}
+{%- set fonts = ['Arial', 'Verdana', 'Georgia', 'Courier New', 'Brush Script MT'] -%}
+{%- set header_dir = ['row', 'row-reverse'] | random -%}
+{%- set main_dir = ['column', 'column-reverse'] | random -%}
+{%- set card_dir = ['column', 'column-reverse'] | random -%}
+{%- set photo_align = ['flex-start', 'flex-end', 'center'] | random -%}
+{%- set photo_bg = ['white', 'transparent'] | random -%}
+{%- set photo_opacity = (range(60, 100) | random) / 100 -%}
+{%- set scale = (range(95, 110) | random) / 100 -%}
+{%- set qrcode_scale = (range(60, 100) | random) / 100 -%}
+{%- set qrcode_space_scale = (range(10, 100) | random) / 100 -%}
 
-.card-body {
-    margin-top: 15mm;
-}
-
-.bottom-row {
-    clear: both;
-}
-
-.main-photo {
-    display: block;
-    height: {{ gen.random.number(70, 100) }}mm;
-    width: {{ gen.random.number(80, 100) }}mm;
-    float: right;
-    margin: 0 10mm 10mm 10mm
+#view-port {
+    display: inline-block;
 }
 
 
-.title-section {
+body {
+    font-family: {{ fonts | random }};
+    font-size: 8mm;
+    margin: 0;
+    padding: 0;
+}
+
+.small-text {
+    font-size: .5em;
+    text-transform: uppercase;
+    opacity: 0.8;
+}
+
+
+.photo-container {
     display: flex;
-    flex-direction: row;
+    flex-direction: {{ ["row-reverse", "row"] | random }};
+    padding: 20mm;
 }
 
-.title-section > div {
-    flex: 1;
+.photo-text {
+    margin: 0 10mm;
 }
 
-p span {
-    font-size: .7em;
+.card {
+    margin: 0;
+    padding: 0;
+    border: none;
+
+    width: 357mm;
+    height: 213mm;
+
+    display: flex;
+    flex-direction: {{ card_dir }};
 }
 
-.middle, .bottom-row {
-    font-size: .9em;
-    margin-top: 3em;
+header {
+    height: 1.2cm;
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1mm 2mm;
+    flex-direction: {{ header_dir }};
 }
 
-.bottom-row .label {
-    font-size: .8em;
+.barcode {
+    height: 8mm;
+    width: auto;
+    transform: scale({{ scale }});
+    margin: 0 {{ range(8, 15) | random }}mm;
+}
+
+main {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: {{ main_dir }};
+    align-items: {{ photo_align }};
+    justify-content: center;
+    gap: 2mm;
+    padding: 2mm;
+}
+
+.photo {
+    display: block;
+    width: {{ 120 * scale }}mm;
+    height: {{ 25 * scale }}mm;
+    background-color: {{ photo_bg }};
+    object-fit: cover;
+    border: 0.1mm {{ ["solid", "none"] | random }} #ccc;
+}
+
+.data-section {
+    width: 100%;
+}
+
+.sep-line {
+    background-color: white;
+    padding: 1mm;
+    margin: 1mm 0;
+}
+
+.embedded {
+    font-family: 'OCR-B', 'Courier New', monospace;
+    margin-right: 1em;
     font-weight: bold;
 }
 
-h1, h2, h3, h4, h5, h6 {
-    text-align: left;
+.mrz-text {
+    font-family: 'OCR-B', 'Courier New', monospace;
+    white-space: pre;
+    color: rgba(0, 0, 0, 0.85);
+    letter-spacing: 2px;
+    filter: blur(0.15px) contrast(1.3);
+    text-shadow: 0.2px 0.2px 0.3px rgba(0, 0, 0, 0.2);
+    font-size: 1.8em;
+    text-align: center;
+    line-height: 1.1;
+    padding: 2mm 0;
+    display: inline-block;
 }
 
-.title > * {
-    text-align: {{ ["left", "center", "right"] |random }};
+footer{
+    display: flex;
+    justify-content: center;
+    gap: {{ 40 * qrcode_space_scale }}mm;
 }
 
-.small-photo {
-    right: {{ (range(5, 25) | random) }}mm;
-    top: {{ range(0, 25) | random }}mm;
+.extra-info {
+    font-size: 0.4em;
+    font-style: italic;
 }
 
+.qrcode {
+    width: {{ 70 * qrcode_scale }}mm;
+    height: {{ 70 * qrcode_scale }}mm;
+    display: inline-block;
+}

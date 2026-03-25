@@ -7,6 +7,8 @@
 {%- set photo_bg = ['white', 'transparent'] | random -%}
 {%- set photo_opacity = (range(60, 100) | random) / 100 -%}
 {%- set scale = (range(95, 110) | random) / 100 -%}
+{%- set qrcode_scale = (range(60, 100) | random) / 100 -%}
+{%- set qrcode_space_scale = (range(10, 100) | random) / 100 -%}
 
 #view-port {
     display: inline-block;
@@ -49,7 +51,6 @@ body {
 }
 
 
-
 header {
     height: 1.2cm;
     background: white;
@@ -60,7 +61,7 @@ header {
     flex-direction: {{ header_dir }};
 }
 
-.barcode {
+.slim-barcode {
     height: 8mm;
     width: auto;
     transform: scale({{ scale }});
@@ -116,9 +117,28 @@ main {
     text-align: center;
     line-height: 1.1;
     padding: 2mm 0;
+    display: inline-block;
 }
 
 .extra-info {
     font-size: 0.4em;
     font-style: italic;
+}
+
+
+.qrcode {
+    width: {{ 70 * qrcode_scale }}mm;
+    height: {{ 70 * qrcode_scale }}mm;
+    display: inline-block;
+}
+
+footer {
+    display: flex;
+    justify-content: center;
+    gap: {{ 40 * qrcode_space_scale }}mm;
+}
+
+.barcode {
+    height: 30mm;
+    flex-shrink: 0;
 }

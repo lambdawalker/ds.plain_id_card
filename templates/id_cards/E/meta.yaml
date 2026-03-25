@@ -1,1 +1,6 @@
-class: vertical_card
+class: horizontal_card_back
+samples: 3000
+description: |
+  This ID card template is designed for horizontal layout with a focus on showcasing
+  detailed information in a compact format. It is suitable for cards that require
+  a balance between visual appeal and content presentation.
