@@ -15,19 +15,59 @@
    try{design={...design,background_recipe:JSON.parse(recipeText)};recipeOpen=false}
    catch(e){notice=e.message}
  }
- let inspector='Inspect',datasetRefs=[],reference='',sourceError='',sourceId='',sourceRecords=[],sourceSearch='',sourceOffset=0;
- async function loadSources(){datasetRefs=await api('datasets')}
+ let inspector='Inspect',datasetRefs=[],reference='',sourceError='',sourceId=null,sourceRecords=[],sourceSearch='',sourceOffset=0;
+ let sourceDialog,addError='',sourceBusy=false,sourceLoading=false,sourceSerial=0;
+ const sourceViews=new Map();
+ $: activeSource=datasetRefs.find(source=>source.id===sourceId);
+ function sourceLabel(reference){return reference.replace(/[\\/]+$/, '').split(/[\\/]/).pop()||reference}
+ async function loadSources(){datasetRefs=await api('datasets');await selectSource(datasetRefs[0]?.id??null)}
  async function browseSource(start=0){
-   sourceOffset=start;
-   sourceRecords=await api('samples?offset='+sourceOffset+'&q='+encodeURIComponent(sourceSearch)+(sourceId?'&source_id='+sourceId:''));
+   const current=++sourceSerial;
+   sourceOffset=start;sourceRecords=[];sourceError='';sourceLoading=sourceId!==null;
+   if(sourceId===null)return;
+   try{
+     const records=await api('samples?offset='+start+'&q='+encodeURIComponent(sourceSearch)+'&source_id='+sourceId);
+     if(current===sourceSerial)sourceRecords=records;
+   }catch(e){if(current===sourceSerial)sourceError=e.message}
+   finally{if(current===sourceSerial)sourceLoading=false}
  }
+ async function selectSource(key){
+   if(sourceId!==null)sourceViews.set(sourceId,{search:sourceSearch,offset:sourceOffset});
+   sourceId=key;
+   const view=sourceViews.get(key);
+   sourceSearch=view?.search??'';
+   await browseSource(view?.offset??0);
+ }
+ function sourceTabKey(e,index){
+   const keys=['ArrowLeft','ArrowRight','Home','End'];
+   if(!keys.includes(e.key))return;
+   e.preventDefault();
+   const next=e.key==='Home'?0:e.key==='End'?datasetRefs.length-1:(index+(e.key==='ArrowRight'?1:-1)+datasetRefs.length)%datasetRefs.length;
+   selectSource(datasetRefs[next].id);
+   document.getElementById('source-tab-'+datasetRefs[next].id)?.focus();
+ }
+ function showSourceDialog(){reference='';addError='';sourceDialog.showModal()}
  async function addSource(){
-   try{datasetRefs=await api('datasets','POST',{reference});reference='';sourceError='';await browseSource()}
-   catch(e){sourceError=e.message}
+   if(sourceBusy||!reference.trim())return;
+   sourceBusy=true;addError='';
+   try{
+     const addedReference=reference.trim();
+     datasetRefs=await api('datasets','POST',{reference:addedReference});
+     sourceDialog.close();
+     await selectSource(datasetRefs.find(source=>source.reference===addedReference)?.id??datasetRefs.at(-1)?.id??null);
+   }catch(e){addError=e.message}
+   finally{sourceBusy=false}
  }
  async function removeSource(key){
-   try{datasetRefs=await api('datasets/'+key,'DELETE');sourceId='';await browseSource()}
-   catch(e){sourceError=e.message}
+   if(sourceBusy)return;
+   sourceBusy=true;sourceError='';
+   const index=datasetRefs.findIndex(source=>source.id===key);
+   try{
+     datasetRefs=await api('datasets/'+key,'DELETE');
+     await selectSource(datasetRefs[Math.min(index,datasetRefs.length-1)]?.id??null);
+     sourceViews.delete(key);
+   }catch(e){sourceError=e.message}
+   finally{sourceBusy=false}
  }
  onMount(()=>{loadSources().catch(e=>sourceError=e.message)});
  let left=25,right=24,templateHeight=50,sourceEditors,assets=[];
@@ -138,20 +178,35 @@
 {#if error}<div role="alert">{error}</div>{/if}</section>
 <button class="grip" aria-label="Resize inspector" on:pointerdown={e=>resize(e,'right')} on:keydown={e=>{if(e.key==='ArrowLeft')right=Math.min(38,right+1);if(e.key==='ArrowRight')right=Math.max(15,right-1)}}></button>
 <section class="inspect"><div class="bar">03 / EXPLORE</div>
-<nav aria-label="Right panel">{#each ['Inspect','Data sources'] as panel}<button class:active={inspector===panel} on:click={()=>{inspector=panel;if(panel==='Data sources')browseSource().catch(e=>sourceError=e.message)}}>{panel}</button>{/each}</nav>
+<nav aria-label="Right panel">{#each ['Inspect','Data sources'] as panel}<button class:active={inspector===panel} on:click={()=>{inspector=panel;if(panel==='Data sources')browseSource(sourceOffset)}}>{panel}</button>{/each}</nav>
 {#if inspector==='Data sources'}
-<div class="dataset-explorer">
-<form on:submit|preventDefault={addSource}><label>Dataset reference<input aria-label="Dataset reference" placeholder="@DS/ds.photo_id" bind:value={reference} required></label><button>Add dataset</button></form>
-{#if sourceError}<p role="alert">{sourceError}</p>{/if}
-{#each datasetRefs as source}
-<div class="dataset-reference"><strong>{source.reference}</strong><small>{source.count} records</small><button on:click={()=>removeSource(source.id)}>Remove reference</button>{#if source.error}<p role="alert">{source.error}</p>{/if}</div>
+<div class="dataset-tabs-bar">
+<div class="dataset-tabs" role="tablist" aria-label="Dataset references">
+{#each datasetRefs as source,index (source.id)}
+<button id={'source-tab-'+source.id} role="tab" aria-selected={sourceId===source.id} aria-controls={'source-panel-'+source.id} tabindex={sourceId===source.id?0:-1} class:active={sourceId===source.id} title={source.reference} disabled={sourceBusy} on:click={()=>selectSource(source.id)} on:keydown={e=>sourceTabKey(e,index)}>{sourceLabel(source.reference)}</button>
 {/each}
-<label>Browse source<select bind:value={sourceId} on:change={()=>browseSource().catch(e=>sourceError=e.message)}><option value="">All sources</option>{#each datasetRefs as source}<option value={source.id}>{source.reference}</option>{/each}</select></label>
-<form on:submit|preventDefault={()=>browseSource().catch(e=>sourceError=e.message)}><input aria-label="Search source records" placeholder="Search records…" bind:value={sourceSearch}><button>Search</button></form>
+</div>
+<button class="add-source" aria-label="Add dataset reference" title="Add dataset reference" on:click={showSourceDialog}>+</button>
+</div>
+<div class="dataset-explorer">
+{#if activeSource}
+<div id={'source-panel-'+activeSource.id} role="tabpanel" aria-labelledby={'source-tab-'+activeSource.id} tabindex="0">
+<div class="dataset-reference"><strong>{activeSource.reference}</strong><small>{activeSource.count} records</small><button disabled={sourceBusy} on:click={()=>removeSource(activeSource.id)}>Remove reference</button></div>
+{#if activeSource.error}<p role="alert">{activeSource.error}</p>{/if}
+<form class="source-search" on:submit|preventDefault={()=>browseSource()}><input aria-label="Search source records" placeholder="Search records…" bind:value={sourceSearch}><button>Search</button></form>
+{#if sourceError}<p role="alert">{sourceError}</p>{/if}
+{#if sourceLoading}<p role="status">Loading records…</p>
+{:else if !sourceError}
 <div class="records">{#each sourceRecords as record}<button on:click={()=>{design.sample=record.id;tab='Context';inspector='Inspect'}}>{#if record.photo_url}<img src={record.photo_url} alt="">{/if}{record.name}</button>{/each}</div>
 {#if !sourceRecords.length}<p>No matching records.</p>{/if}
-<button disabled={!sourceOffset} on:click={()=>browseSource(sourceOffset-24).catch(e=>sourceError=e.message)}>Previous</button>
-<button disabled={sourceRecords.length<24} on:click={()=>browseSource(sourceOffset+24).catch(e=>sourceError=e.message)}>Next</button>
+{/if}
+<div class="source-pagination"><button disabled={sourceLoading||!sourceOffset} on:click={()=>browseSource(sourceOffset-24)}>Previous</button>
+<button disabled={sourceLoading||sourceRecords.length<24} on:click={()=>browseSource(sourceOffset+24)}>Next</button></div>
+</div>
+{:else}
+{#if sourceError}<p role="alert">{sourceError}</p>{/if}
+<p>No dataset references. Use + to add a dataset.</p>
+{/if}
 </div>
 {:else}
 <nav>{#each ['HTML','CSS','Context'] as t}<button class:active={tab===t} on:click={()=>tab=t}>{t}</button>{/each}</nav>
@@ -161,3 +216,14 @@
     value={tab==='HTML'?output:tab==='CSS'?renderedCSS:JSON.stringify(context,null,2)} />
 {/key}{/if}</section></main>
 <footer>{notice|| (dirty?'● Modified':id?'● Saved locally':'New draft')} <span>Design {id??"draft"}　 /　 Seed {design.seed}</span></footer>
+
+<dialog class="source-dialog" bind:this={sourceDialog} aria-labelledby="source-dialog-title" aria-describedby="source-dialog-help" on:cancel={e=>{if(sourceBusy)e.preventDefault()}}>
+<form on:submit|preventDefault={addSource}>
+<h2 id="source-dialog-title">Add dataset reference</h2>
+<p id="source-dialog-help">Enter an alias such as @DS/ds.photo_id or a dataset folder path.</p>
+<label for="dataset-reference">Dataset reference</label>
+<input id="dataset-reference" placeholder="@DS/ds.photo_id" bind:value={reference} required disabled={sourceBusy}>
+{#if addError}<p role="alert">{addError}</p>{/if}
+<div class="dialog-actions"><button type="button" disabled={sourceBusy} on:click={()=>sourceDialog.close()}>Cancel</button><button class="primary" disabled={sourceBusy||!reference.trim()}>{sourceBusy?'Adding…':'Add dataset'}</button></div>
+</form>
+</dialog>

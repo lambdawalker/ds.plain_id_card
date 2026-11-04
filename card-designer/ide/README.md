@@ -51,7 +51,7 @@ The shared package is in ../packages/drawing-tools. See its README for the modul
 structure, browser requirements, testing and differences from Python rendering.
 
 ## Dataset references
-Use the right panel's **Data sources** tab to add a ds.photo_id reference such as @DS/ds.photo_id or an absolute folder path. References persist across restarts. Select a source, search records, and click a photo to use it in the preview. Remove reference disconnects it from the IDE.
+Open the right panel's **Data sources** tab. Each referenced dataset has its own tab, with search, pagination and **Remove reference** controls inside its panel. Use Left/Right arrows or Home/End to navigate the tabs; long tab rows scroll horizontally. The **+** button beside the tabs opens a dialog accepting a ds.photo_id reference such as @DS/ds.photo_id or an absolute folder path. Adding a reference selects its tab; Cancel or Escape closes the dialog. References persist across restarts. Search and pagination are remembered separately for each tab during the session. Click a photo to use it in the preview. Removing a reference disconnects it from the IDE and selects a neighboring tab.
 
 Aliases use the drawing tools PathResolver, included in backend/path_resolver.py with its upstream MIT license. Configure DS in the environment or add DS=D:\datasets to ~/.lw_paths. File aliases take priority over environment variables. Relative paths resolve from the backend working directory. References currently accept the ds.photo_id manifest schema.
 
