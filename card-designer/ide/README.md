@@ -16,6 +16,11 @@ Edit the starter or choose **Open template A** for a working adaptation of the r
 
 Preview randomness is request-local. The Jinja random filter and the A-template helpers use a fresh generator for each render; the browser background uses a separate generator initialized with the same unsigned 32-bit seed. To replay a test, hold the template, CSS, sample, assets, seed, background and color constant. Browser version and fonts can affect pixels. Randomize chooses a new seed and keeps the sample. Template errors retain the last successful preview.
 
+## Format source code
+Each Template and Stylesheet header has a **Format** button. With focus inside either editable code pane, press **Ctrl+Alt+L** to format that pane. Formatting is one undoable edit and does not save the design. It preserves Jinja expressions, blocks and comments while formatting surrounding HTML or CSS. If syntax cannot be formatted safely (including conditional attributes inside an HTML opening tag), an editor message explains the failure and the source stays unchanged. Edits made while the formatter loads take priority over the pending result.
+
+Run formatter regression tests from ide/web with `node --test test/*.test.mjs`.
+
 ## Local datasets
 Point CARD_PHOTO_DATASET at the ds.photo_id folder containing manifest.yaml, or set DS to its parent. Restart the server, open Dataset, and search by filename stem. The IDE joins image, prompt, card and description by stem using the manifest source folders. Templates can use {{ person.image }} for the photo URL and {{ person.card }} for the parsed profile. Context shows the available fields. Missing sidecars are omitted. CARD_PHOTOS also supports loose images.
 

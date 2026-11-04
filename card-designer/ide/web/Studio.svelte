@@ -75,7 +75,7 @@
    finally{sourceBusy=false}
  }
  onMount(()=>{loadSources().catch(e=>sourceError=e.message)});
- let left=25,right=24,templateHeight=50,sourceEditors,assets=[];
+ let left=25,right=24,templateHeight=50,sourceEditors,templateEditor,cssEditor,assets=[];
  async function upload(e){
    const file=e.target.files[0];if(!file)return;
    const res=await fetch('/api/artwork?name='+encodeURIComponent(file.name),{method:'POST',headers:{'Content-Type':file.type},body:file});
@@ -173,9 +173,9 @@
 <main style={'--left:'+left+'%;--right:'+right+'%'}>
 <section class="sources"><div class="bar">01 / SOURCE <small>EDITABLE</small></div>
 <div class="source-editors" style={'--template-height:'+templateHeight+'%'} bind:this={sourceEditors}>
-<div class="source-pane"><h3>◇ Template <em>HTML / Jinja</em></h3><Editor {dark} value={design.template} label="Template source" change={v=>design.template=v}/></div>
+<div class="source-pane"><h3>◇ Template <span class="editor-actions"><em>HTML / Jinja</em><button title="Format template (Ctrl+Alt+L)" aria-label="Format template" on:click={()=>templateEditor?.format()}>Format</button></span></h3><Editor bind:this={templateEditor} {dark} value={design.template} label="Template source" change={v=>design.template=v}/></div>
 <button class="grip row-grip" aria-label="Resize template and stylesheet panels" aria-valuenow={templateHeight} aria-valuemin="15" aria-valuemax="85" role="separator" aria-orientation="horizontal" on:pointerdown={resizeSource} on:keydown={sourceResizeKey}></button>
-<div class="source-pane"><h3># Stylesheet <em>CSS / Jinja</em></h3><Editor {dark} value={design.css} language="css" label="CSS source" change={v=>design.css=v}/></div>
+<div class="source-pane"><h3># Stylesheet <span class="editor-actions"><em>CSS / Jinja</em><button title="Format stylesheet (Ctrl+Alt+L)" aria-label="Format stylesheet" on:click={()=>cssEditor?.format()}>Format</button></span></h3><Editor bind:this={cssEditor} {dark} value={design.css} language="css" label="CSS source" change={v=>design.css=v}/></div>
 </div></section>
 <button class="grip" aria-label="Resize source panel" on:pointerdown={e=>resize(e,'left')} on:keydown={e=>{if(e.key==='ArrowRight')left=Math.min(38,left+1);if(e.key==='ArrowLeft')left=Math.max(15,left-1)}}></button>
 <section class="canvas"><div class="bar">02 / PREVIEW <select aria-label="Zoom" bind:value={zoom}><option value="fit">Fit</option><option value=".5">50%</option><option value="1">100%</option><option value="1.5">150%</option></select></div>
