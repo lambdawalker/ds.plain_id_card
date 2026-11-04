@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Card Designer</title><link rel="stylesheet" href="studio.css">
+<header><small>DATASET TOOLS / DESIGN STUDIO</small><h1>Card Designer</h1></header>
+<main>
+<section><h2>01 · Card source</h2><label for="source">HTML and CSS</label>
+<textarea id="source" spellcheck="false"><style>
+article { padding: 38px; font: 20px system-ui; color: #15323b }
+header { font-size: 15px; letter-spacing: .18em }
+section { display: flex; gap: 25px; align-items: center; margin-top: 35px }
+figure { margin: 0; width: 112px; height: 142px; background: #346877; display: grid; place-items: center; color: white; font-size: 40px }
+small { display: block; margin-top: 12px; font-size: 12px; text-transform: uppercase }
+</style>
+<article>
+  <header>FIELD REGISTRY / SPECIMEN</header>
+  <section>
+    <figure data-class="photo" aria-label="Portrait placeholder">AR</figure>
+    <div><small>Cardholder</small><strong>Alex Rivera</strong>
+    <small>Record number</small>042–1058</div>
+  </section>
+</article></textarea>
+</section>
+<section><h2>02 · Live preview</h2><div id="stage"><iframe sandbox="" title="Card preview"></iframe></div>
+<h2>Background</h2><div class="controls">
+<label>Pattern<select id="pattern"><option value="type-b">Type B · dots and waves</option></select></label>
+<label>Color<input type="color" id="color" value="#a7d7cf"></label>
+<label>Seed<input id="seed" type="number" min="0" max="4294967295" value="42"></label>
+<button id="shuffle">Randomize</button></div>
+<p><label>Add a background image <input id="upload" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml"></label></p>
+<p id="status" role="status"></p><button id="save">Download card HTML</button></section>
+</main><script src="backgrounds/type-b.js"></script><script src="studio.js"></script></html>
