@@ -12,9 +12,13 @@ On macOS or Linux, from this directory:
     .venv/bin/python -m uvicorn backend.app:app --host 127.0.0.1 --port 8765
 
 ## Design and replay
-Edit the starter or choose **Open template A** for a static example card. Their example names, addresses, dates and identifiers live directly in the template source, with no built-in people records or demo generator helpers. The starter is in web/starter.js; template A is in templates/a.html and templates/a.css. Static templates render without a selected dataset record. To return to an empty context after selecting data, open Dataset and choose **Clear selection · static preview**. Save the template and stylesheet together with their sample, seed, background and color. Rename using the Design field. Ctrl+S saves. Clone saves the current edits and creates an independent copy.
+The default starter contains static example text and needs no dataset. Use **Open** (folder icon) to browse original templates A–G, each with a live preview rendered using the current seed, background and selected data. Choosing a template creates an unsaved editable draft; opening or closing the dialog preserves current edits, and replacing edited work asks for confirmation. New, Clone, Save and Delete use conventional icons with tooltips and accessible labels. Saved designs remain available through the design selector.
 
-Preview randomness is request-local. The Jinja random filter and the A-template helpers use a fresh generator for each render; the browser background uses a separate generator initialized with the same unsigned 32-bit seed. To replay a test, hold the template, CSS, sample, assets, seed, background and color constant. Browser version and fonts can affect pixels. Randomize chooses a new seed and keeps the sample. Template errors retain the last successful preview.
+The original templates use a dataset-backed rendering context with seeded synthetic text/number generators. The generator supplies layout filler rather than a hidden people dataset. Connect photo and machine-readable-code datasets in **Data sources** to replace the labeled missing-image placeholders with actual records. The original portrait templates retain their native proportions; the preview, procedural backgrounds, saved designs and bulk exporter use each template's width/height. Old designs default to 640 × 400.
+
+Save the template and stylesheet together with their selected sample, seed, dimensions, background and color. Ctrl+S saves. Clone saves current edits and creates an independent copy. To return to an empty selected-person context, open Dataset and choose **Clear selection · static preview**.
+
+Preview randomness is request-local. The Jinja random filter and the template context generators use a fresh generator for each render; the browser background uses a separate generator initialized with the same unsigned 32-bit seed. To replay a test, hold the template, CSS, sample, assets, seed, background and color constant. Browser version and fonts can affect pixels. Randomize chooses a new seed and keeps the sample. Template errors retain the last successful preview.
 
 ## Format source code
 Each Template and Stylesheet header has a **Format** button. With focus inside either editable code pane, press **Ctrl+Alt+L** to format that pane. Formatting is one undoable edit and does not save the design. It preserves Jinja expressions, blocks and comments while formatting surrounding HTML or CSS. If syntax cannot be formatted safely (including conditional attributes inside an HTML opening tag), an editor message explains the failure and the source stays unchanged. Edits made while the formatter loads take priority over the pending result.
@@ -74,3 +78,23 @@ Each rawImage field is exposed as an image URL in Context and templates: for exa
 The server starts serving the IDE immediately and warms saved dataset references in the background. Separate workers index datasets concurrently, with up to eight active scans. Loose CARD_PHOTOS files and first-run environment discovery also run after startup. Dataset list reads use the cached index instead of rescanning folders. Add/remove operations update the index and serialize with startup loading.
 
 The UI polls `/api/datasets/status` while startup indexing runs, keeps referenced tabs visible with loading indicators, and refreshes records and saved previews when ready. A selected record that is still loading returns HTTP 503; static templates remain usable. Background failures are logged and shown in the dataset panel. Restart the server to pick up files added to connected folders. Shutdown cancels queued work and does not wait indefinitely for a blocked filesystem scan.
+
+## Original template ports and context
+The editor ports of `templates/id_cards/A` through `G` live under `ide/templates/id_cards/`. HTML keeps the original Jinja layout logic; dataset resource URLs are adapted to `ds.image(...)`. Variant CSS is included with `base.css`, a shared editor foundation because the upstream `_common_` stylesheet references are absent from this repository. Original generator templates remain unchanged. `backend/template_catalog.py` supplies the gallery metadata and editable sources through `/api/templates` and `/api/templates/{A..G}`.
+
+`backend/render_context.py` implements the context used by the ports, following the original TemplateServer/TemplateRenderer flow:
+
+| Name | Content |
+|---|---|
+| `person` | Explicitly selected record with metadata and image URLs; empty when none is selected |
+| `data` | Selected record data with the original filename-stem `id` and aligned record `index` |
+| `common` | Optional saved per-design values, empty by default |
+| `env.theme` | Primary/text colors, including `to_rgb_hex()` |
+| `gen` | Request-local seeded text, random, date and address generators used by A–G |
+| `ds` | Access to connected dataset records and fields |
+
+For example, `{{ ds.image('lambdaWalker/ds.machine_readable_code', data.id, 'slim_barcode') }}` returns a served image URL. `ds['lambdaWalker/ds.photo_id'][0]` accesses a record; `.random()` uses the request seed. The historical `ds.machineReadableCode` identifier is accepted as an alias. Matching filename stems align records across sources; otherwise the same ordinal selects a record modulo each dataset's size. Without an explicit sample, the seed supplies that ordinal. Missing images use labeled neutral placeholders and are reported in Context, rather than fabricated dataset records.
+
+The Context inspector includes the effective data, colors, source metadata, real records used from each dataset and missing-field diagnostics. HTML and CSS share one request-local random generator, so a seed replays the same result without changing process-global randomness. The generator compatibility covers the APIs used by the seven ports; its synthetic output is not intended to reproduce the upstream library's random bytes.
+
+Rendering references: [original TemplateRenderer](https://github.com/lambdawalker/python_lw_drawing_tools/blob/main/src/lambdawalker/template/server/render/TemplateRenderer.py), [TemplateServer](https://github.com/lambdawalker/python_lw_drawing_tools/blob/main/src/lambdawalker/template/server/TemplateServer.py), and [field generator context](https://github.com/lambdawalker/python_lw_drawing_tools/blob/main/src/lambdawalker/template/fields.py).

@@ -23,6 +23,7 @@ def main():
     with urlopen(f"{args.server}/api/designs/{args.design}") as response:
         design = json.load(response)
     samples = args.samples or [design["sample"]]
+    width, height = design.get("width", 640), design.get("height", 400)
     first = design["seed"] if args.seed is None else args.seed
     args.output.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as playwright:
@@ -30,7 +31,7 @@ def main():
         engine = browser.new_page()
         engine.goto(args.server)
         engine.wait_for_function("typeof window.cardDesignerRender === 'function'")
-        page = browser.new_page(viewport={"width": 640, "height": 400})
+        page = browser.new_page(viewport={"width": width, "height": height})
         page.goto(args.server + "/api/samples")
         for i in range(args.count):
             target = args.output / f"{i:06d}"
@@ -39,7 +40,7 @@ def main():
             design.update(seed=(first + i) % 2**32, sample=samples[i % len(samples)])
             rendered = engine.evaluate("d => window.cardDesignerRender(d)", design)
             html = rendered["html"]
-            page.set_content('<iframe sandbox="" style="display:block;border:0;width:640px;height:400px"></iframe><style>body{margin:0}</style>')
+            page.set_content(f'<iframe sandbox="" style="display:block;border:0;width:{width}px;height:{height}px"></iframe><style>body{{margin:0}}</style>')
             page.locator("iframe").evaluate("(frame, html) => frame.srcdoc = html", html)
             card = page.frame_locator("iframe").locator("#view-port")
             card.wait_for()

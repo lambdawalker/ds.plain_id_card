@@ -1,0 +1,36 @@
+<div class="card">
+        <div>
+            {% if gen.random.boolean() %}
+                <img class="barcode" src="{{ ds.image('lambdaWalker/ds.machine_readable_code', data.id, 'barcode') }}" data-class="barcode" alt="Barcode">
+            {% else %}
+                <img class="slim-barcode" src="{{ ds.image('lambdaWalker/ds.machine_readable_code', data.id, 'slim_barcode') }}" data-class="barcode" alt="slim-barcode">
+            {% endif %}
+            <main>
+                {% if gen.random.boolean() %}
+                    <h2>{{ gen.text.sentence((3,10)) }}</h2>
+                {% endif %}
+
+                {% for i in range([2, 3] | random) %}
+                    <p>{{ gen.text.sentence((6,20)) }}</p>
+                {% endfor %}
+
+                <div class="footer">
+                    {%- if gen.random.boolean() %}
+                        <img class="pdf417" src="{{ ds.image('lambdaWalker/ds.machine_readable_code', data.id, 'pdf417') }}" data-class="pdf417" alt="PDF417">
+                    {% else %}
+                        {% for i in range([1,2] | random) %}
+                            <img class="qrcode" src="{{ ds.image('lambdaWalker/ds.machine_readable_code', data.id, 'qrcode') }}" data-class="qrcode" alt="qrcode">
+                        {% endfor %}
+                    {% endif -%}
+
+                    <div class="extra-text">
+                        {% for i in range([2, 3] | random) %}
+                            <p>{{ gen.text.sentence((6,30)) }}</p>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <p>{{ gen.text.sentence((6,30)) }}</p>
+            </main>
+        </div>
+    </div>

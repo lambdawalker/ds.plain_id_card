@@ -21,6 +21,8 @@ from .path_resolver import resolve
 from threading import RLock, Thread, Event
 from .photo_dataset import metadata, photo_index
 from .legacy import sample_template
+from .template_catalog import template_catalog, template_source
+from .render_context import build_context
 from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -71,6 +73,10 @@ class Design(BaseModel):
     background: str = Field(pattern=r"^(type-b|type-[abcd]-v1|plain|asset-[0-9a-f]{64})$")
     background_recipe: dict | None = None
     sample: str = ""
+    width: int = Field(default=640, ge=160, le=4096)
+    height: int = Field(default=400, ge=160, le=4096)
+    template_id: str | None = None
+    common: dict = Field(default_factory=dict)
 
 
 class Preview(BaseModel):
@@ -411,6 +417,19 @@ def template_a():
     return sample_template()
 
 
+@app.get("/api/templates")
+def list_templates():
+    return template_catalog()
+
+
+@app.get("/api/templates/{key}")
+def open_template(key: str):
+    try:
+        return template_source(key)
+    except KeyError as exc:
+        raise HTTPException(404, "Unknown template") from exc
+
+
 @app.post("/api/preview")
 def preview(request: Preview):
     d = request.design
@@ -428,15 +447,20 @@ def preview(request: Preview):
                              person["dataset"], person["record_id"], type(exc).__name__, exc)
             raise HTTPException(422, f"Invalid metadata for dataset {person['dataset']}, record {person['record_id']}: {exc}") from exc
     rng = random.Random(d.seed)
+    try:
+        render_context, context_summary = build_context(snapshot, d, person, rng)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        logger.exception("Template context failed: template=%r sample=%r: %s", d.template_id, d.sample, exc)
+        raise HTTPException(422, f"Could not build template context: {exc}") from exc
     env = SandboxedEnvironment(undefined=StrictUndefined, autoescape=True)
     env.filters["random"] = rng.choice
     result = {}
     for field in ("template", "css"):
         try:
-            result[field] = env.from_string(getattr(d, field)).render(person=person, seed=d.seed, data=person)
+            result[field] = env.from_string(getattr(d, field)).render(**render_context)
         except (TemplateError, IndexError, ArithmeticError, ValueError, TypeError) as exc:
             raise HTTPException(422, f"{field}, line {getattr(exc, 'lineno', '?')}: {exc}") from exc
-    return {**result, "person": person}
+    return {**result, "person": person, "context": context_summary}
 
 
 app.mount("/backgrounds", StaticFiles(directory=ROOT.parent / "backgrounds"))

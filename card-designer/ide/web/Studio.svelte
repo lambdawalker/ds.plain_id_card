@@ -2,11 +2,12 @@
  import {onMount} from 'svelte';
  import {formatOutput} from './format-output.js';
  import Editor from './Editor.svelte';
+ import Icon from './Icon.svelte';
  import {api,renderCard,backgroundRecipe} from './render.js';
  import {starter} from './starter.js';
  let design={...starter}, designs=[], id=null, saved='', ready=false, busy=false;
  let preview='',output='',renderedCSS='',context={},error='',notice='',listing=false,samples=[],search='',offset=0;
- let theme=localStorage.getItem('studio-theme')||'system',zoom='fit',width=720,tab='HTML',serial=0,querySerial=0;
+ let theme=localStorage.getItem('studio-theme')||'system',zoom='fit',width=720,stageHeight=600,tab='HTML',serial=0,querySerial=0;
  let media=window.matchMedia("(prefers-color-scheme: dark)"),systemDark=media.matches;
  $: dark=theme==="dark"||(theme==="system"&&systemDark);
  let recipeText='',recipeOpen=false;
@@ -36,6 +37,7 @@
      if(wasLoading&&!datasetsBooting){
        if(ready)schedule({...design});
        if(listing)list(search,offset);
+       if(templateDialog?.open)showTemplates();
      }
    }catch(e){sourceError=e.message;sourceListLoading=false;datasetsBooting=false}
    finally{if(!sourcesDisposed&&datasetsBooting)sourcePoll=setTimeout(loadSources,500)}
@@ -100,7 +102,9 @@
  $: document.documentElement.dataset.theme=theme;
  $: localStorage.setItem('studio-theme',theme);
  $: dirty=JSON.stringify(design)!==saved;
- $: scale=zoom==='fit'?Math.min(1.6,Math.max(.1,(width-72)/640)):Number(zoom);
+ $: cardWidth=design.width||640;
+ $: cardHeight=design.height||400;
+ $: scale=zoom==='fit'?Math.min(1.6,Math.max(.05,Math.min((width-72)/cardWidth,(stageHeight-96)/cardHeight))):Number(zoom);
  async function refresh(){designs=await api('designs')}
  async function open(key){
    const next=key?await api('designs/'+key):{...starter};
@@ -119,7 +123,43 @@
    const result=await api(id?'designs/'+id:'designs',id?'PUT':'POST',snapshot);
    id=result.id;if(JSON.stringify(design)===original)design=snapshot;saved=JSON.stringify(snapshot);await refresh();notice='Saved';
  }
- async function importA(){if(!canLeave())return;const source=await api("templates/a");await open(null);design={...starter,...source,name:"ID card · A"}}
+ let templateDialog,templates=[],templatesLoading=false,templatesError='',templateSerial=0,templateOpening=null;
+ let gallerySettings={};
+ function currentSettings(){return {seed:design.seed,color:design.color,background:design.background,background_recipe:design.background_recipe,sample:design.sample}}
+ async function showTemplates(){
+   templateDialog.showModal();
+   const current=++templateSerial;
+   gallerySettings=currentSettings();templates=[];templatesLoading=true;templatesError='';
+   try{
+     const items=await api('templates');
+     if(current!==templateSerial)return;
+     templates=items.map(item=>({...item,state:'loading',html:'',source:null,error:''}));
+     templatesLoading=false;
+     // Render sequentially so procedural backgrounds do not compete for GPU memory.
+     for(let index=0;index<items.length;index++){
+       if(current!==templateSerial)return;
+       try{
+         const source=await api('templates/'+encodeURIComponent(items[index].id));
+         const result=await renderCard({...starter,...source,...gallerySettings});
+         if(current!==templateSerial)return;
+         templates=templates.map((item,i)=>i===index?{...item,source,html:result.html,state:'ready'}:item);
+       }catch(e){if(current===templateSerial)templates=templates.map((item,i)=>i===index?{...item,state:'error',error:e.message}:item)}
+     }
+   }catch(e){if(current===templateSerial)templatesError=e.message}
+   finally{if(current===templateSerial)templatesLoading=false}
+ }
+ function closeTemplates(){templateSerial++;templateDialog.close()}
+ async function selectTemplate(item){
+   if(templateOpening||!canLeave())return;
+   templateOpening=item.id;
+   try{
+     const source=item.source||await api('templates/'+encodeURIComponent(item.id));
+     const settings=currentSettings();
+     id=null;saved=JSON.stringify(starter);design={...starter,...source,...settings};notice='';
+     closeTemplates();
+   }catch(e){templates=templates.map(entry=>entry.id===item.id?{...entry,state:'error',error:e.message}:entry)}
+   finally{templateOpening=null}
+ }
  async function newDesign(){if(!canLeave())return;const name=prompt('Design name','Untitled card');if(name?.trim()){await open(null);design={...starter,name:name.trim()}}}
  async function clone(){if(dirty||!id) await save();const copy=await api('designs/'+id+'/clone','POST');await refresh();await open(copy.id)}
  async function remove(){if(confirm('Delete '+design.name+'?')){await api('designs/'+id,'DELETE');await refresh();await open(designs[0]?.id)}}
@@ -127,7 +167,7 @@
    const current=++serial;
    setTimeout(async()=>{if(current!==serial)return;
      try{const result=await renderCard(d);if(current!==serial)return;
-       preview=result.html;output=result.template;renderedCSS=result.css;context={seed:d.seed,sample:result.person,background:d.background,recipe:result.background_recipe};error='';
+       preview=result.html;output=result.template;renderedCSS=result.css;context={...(result.context||{}),seed:d.seed,sample:result.person,background:d.background,recipe:result.background_recipe};error='';
        const formatted=await Promise.all([formatOutput(result.template,'html'),formatOutput(result.css,'css')]);
        if(current===serial)[output,renderedCSS]=formatted;
      }catch(e){if(current===serial)error=e.message}
@@ -165,8 +205,11 @@
 <header class="top"><strong><i>▧</i> Card Designer</strong><span class="tag">STUDIO</span>
 <select aria-label="Open design" value={id??''} disabled={busy} on:change={e=>{let k=Number(e.target.value);e.target.value=id??'';if(canLeave())act(()=>open(k))}}>
 {#if !id}<option value="">Current draft</option>{/if}{#each designs as d}<option value={d.id}>{d.name}</option>{/each}</select>
-<button on:click={()=>act(newDesign)}>＋ New</button><button on:click={()=>act(importA)}>Open template A</button><button on:click={()=>act(clone)}>Clone</button>
-<button class="primary" on:click={()=>act(save)}>Save</button><button disabled={!id} on:click={()=>act(remove)}>Delete</button>
+<button class="icon-button" title="New design" aria-label="New design" disabled={busy} on:click={()=>act(newDesign)}><Icon name="new"/></button>
+<button class="icon-button open-templates" title="Open templates" aria-label="Open templates" disabled={busy} on:click={showTemplates}><Icon name="open"/></button>
+<button class="icon-button" title="Clone design" aria-label="Clone design" disabled={busy} on:click={()=>act(clone)}><Icon name="clone"/></button>
+<button class="primary icon-button" title="Save design (Ctrl+S)" aria-label="Save design" disabled={busy} on:click={()=>act(save)}><Icon name="save"/></button>
+<button class="icon-button" title="Delete design" aria-label="Delete design" disabled={busy||!id} on:click={()=>act(remove)}><Icon name="delete"/></button>
 <span class="grow"></span><label>Theme <select bind:value={theme}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label></header>
 <div class="toolbar"><label>Design <input bind:value={design.name} maxlength="160"></label>
 <label>Background <select bind:value={design.background}><option value="type-b">Type B · Original recipe</option><option value="type-b-v1">Type B · Gradients, grids, lines</option><option value="type-c-v1">Type C · With header</option><option value="type-d-v1">Type D · With country</option><option value="type-a-v1">Type A · Country and header</option><option value="plain">Solid</option>{#each assets as a}<option value={a.id}>{a.name}</option>{/each}</select></label>
@@ -195,7 +238,7 @@
 </div></section>
 <button class="grip" aria-label="Resize source panel" on:pointerdown={e=>resize(e,'left')} on:keydown={e=>{if(e.key==='ArrowRight')left=Math.min(38,left+1);if(e.key==='ArrowLeft')left=Math.max(15,left-1)}}></button>
 <section class="canvas"><div class="bar">02 / PREVIEW <select aria-label="Zoom" bind:value={zoom}><option value="fit">Fit</option><option value=".5">50%</option><option value="1">100%</option><option value="1.5">150%</option></select></div>
-<div class="stage" bind:clientWidth={width}><div class="art"><div class="ruler" aria-hidden="true" style={"background-size:"+scale*32+"px 100%"}></div><small>SPECIMEN　 /　640 × 400</small><div style={'width:'+640*scale+'px;height:'+400*scale+'px'}><iframe title="Card preview" sandbox="" srcdoc={preview} style={'transform:scale('+scale+')'}></iframe></div></div></div>
+<div class="stage" bind:clientWidth={width} bind:clientHeight={stageHeight}><div class="art"><div class="ruler" aria-hidden="true" style={"background-size:"+scale*32+"px 100%"}></div><small>SPECIMEN　 /　{cardWidth} × {cardHeight}</small><div style={'width:'+cardWidth*scale+'px;height:'+cardHeight*scale+'px'}><iframe title="Card preview" sandbox="" srcdoc={preview} style={'width:'+cardWidth+'px;height:'+cardHeight+'px;transform:scale('+scale+')'}></iframe></div></div></div>
 {#if error}<div role="alert">{error}</div>{/if}</section>
 <button class="grip" aria-label="Resize inspector" on:pointerdown={e=>resize(e,'right')} on:keydown={e=>{if(e.key==='ArrowLeft')right=Math.min(38,right+1);if(e.key==='ArrowRight')right=Math.max(15,right-1)}}></button>
 <section class="inspect"><div class="bar">03 / EXPLORE</div>
@@ -252,4 +295,23 @@
 {#if addError}<p role="alert">{addError}</p>{/if}
 <div class="dialog-actions"><button type="button" disabled={sourceBusy} on:click={()=>sourceDialog.close()}>Cancel</button><button class="primary" disabled={sourceBusy||!reference.trim()}>{sourceBusy?'Adding…':'Add dataset'}</button></div>
 </form>
+</dialog>
+
+<dialog class="template-dialog" bind:this={templateDialog} aria-labelledby="template-dialog-title" aria-describedby="template-dialog-help" on:cancel={()=>templateSerial++}>
+<div class="template-dialog-header"><div><h2 id="template-dialog-title">Open a template</h2><p id="template-dialog-help">Choose an original layout to start a new draft with your current data and background.</p></div><button class="icon-button" title="Close templates" aria-label="Close templates" on:click={closeTemplates}><Icon name="close"/></button></div>
+{#if templatesLoading}<p class="gallery-status" role="status"><span class="source-spinner" aria-hidden="true"></span> Loading templates…</p>
+{:else if templatesError}<div class="gallery-status" role="alert"><p>{templatesError}</p><button on:click={showTemplates}>Try again</button></div>
+{:else if !templates.length}<p class="gallery-status">No templates available.</p>
+{:else}<div class="template-grid">
+{#each templates as item (item.id)}
+<button class="template-card" disabled={!!templateOpening} on:click={()=>selectTemplate(item)} aria-label={'Open '+item.name}>
+<div class="template-thumbnail">
+{#if item.state==='ready'}<div class="thumbnail-frame" style={'width:'+item.width*(Math.min(220/item.width,180/item.height))+'px;height:'+item.height*(Math.min(220/item.width,180/item.height))+'px'}><iframe title={'Preview template '+item.id} sandbox="" tabindex="-1" srcdoc={item.html} style={'width:'+item.width+'px;height:'+item.height+'px;transform:scale('+Math.min(220/item.width,180/item.height)+')'}></iframe></div>
+{:else if item.state==='loading'}<span role="status"><span class="source-spinner" aria-hidden="true"></span> Rendering preview…</span>
+{:else}<span class="template-preview-error">Preview unavailable<span>{item.error}</span></span>{/if}
+</div>
+<div class="template-card-copy"><strong>{item.name}</strong><small>{item.kind} · {item.width} × {item.height}</small><p>{item.description}</p>{#if item.required_datasets?.length}<span class="template-requirements">Uses {item.required_datasets.join(', ')}</span>{/if}<span class="template-open-label">{templateOpening===item.id?'Opening…':'Open template '+item.id+' →'}</span></div>
+</button>
+{/each}
+</div>{/if}
 </dialog>
