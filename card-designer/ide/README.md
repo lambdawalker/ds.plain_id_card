@@ -12,7 +12,7 @@ On macOS or Linux, from this directory:
     .venv/bin/python -m uvicorn backend.app:app --host 127.0.0.1 --port 8765
 
 ## Design and replay
-Edit the starter or choose **Open template A** for a working adaptation of the repository's first Jinja card. The adaptation uses local photo URLs, base styles and deterministic preview helpers. Save the template and stylesheet together with their sample, seed, background and color. Rename using the Design field. Ctrl+S saves. Clone saves the current edits and creates an independent copy.
+Edit the starter or choose **Open template A** for a static example card. Their example names, addresses, dates and identifiers live directly in the template source, with no built-in people records or demo generator helpers. The starter is in web/starter.js; template A is in templates/a.html and templates/a.css. Static templates render without a selected dataset record. To return to an empty context after selecting data, open Dataset and choose **Clear selection · static preview**. Save the template and stylesheet together with their sample, seed, background and color. Rename using the Design field. Ctrl+S saves. Clone saves the current edits and creates an independent copy.
 
 Preview randomness is request-local. The Jinja random filter and the A-template helpers use a fresh generator for each render; the browser background uses a separate generator initialized with the same unsigned 32-bit seed. To replay a test, hold the template, CSS, sample, assets, seed, background and color constant. Browser version and fonts can affect pixels. Randomize chooses a new seed and keeps the sample. Template errors retain the last successful preview.
 
@@ -24,7 +24,7 @@ Run formatter regression tests from ide/web with `node --test test/*.test.mjs`.
 ## Local datasets
 Point CARD_PHOTO_DATASET at the ds.photo_id folder containing manifest.yaml, or set DS to its parent. Restart the server, open Dataset, and search by filename stem. The IDE joins image, prompt, card and description by stem using the manifest source folders. Templates can use {{ person.image }} for the photo URL and {{ person.card }} for the parsed profile. Context shows the available fields. Missing sidecars are omitted. CARD_PHOTOS also supports loose images.
 
-Four fictional text records work immediately. To browse real local face photos, set CARD_PHOTOS to the image directory before launch. For example, in PowerShell:
+The dataset browser starts empty until real sources are connected. To browse real local face photos, set CARD_PHOTOS to the image directory before launch. For example, in PowerShell:
 
     $env:CARD_PHOTOS = 'D:\datasets\ds.photo_id\body'
     ..\start.bat

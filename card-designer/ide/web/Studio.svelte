@@ -166,6 +166,7 @@
 <button on:click={applyRecipe}>Apply</button><button on:click={()=>{design={...design,background_recipe:null};recipeOpen=false}}>Reset parameters</button></aside>{/if}
 <button aria-expanded={listing} on:click={()=>listing=!listing}>▦ Dataset · {context.sample?.name??'Browse'}</button>
 {#if listing}<aside class="picker"><div class="bar">Local dataset <button on:click={()=>listing=false}>Close</button></div>
+<button disabled={!design.sample} on:click={()=>{design.sample='';listing=false}}>Clear selection · static preview</button>
 <input aria-label="Search dataset" placeholder="Search records…" bind:value={search} on:input={()=>offset=0}>
 <div class="records">{#each samples as p}<button on:click={()=>{design.sample=p.id;listing=false}}>{#if p.photo_url}<img src={p.photo_url} alt="">{:else}<b>{p.name[0]}</b>{/if}{p.name}</button>{/each}</div>
 {#if !samples.length}<p>No matching records.</p>{/if}

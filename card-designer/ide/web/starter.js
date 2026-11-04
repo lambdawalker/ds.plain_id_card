@@ -1,14 +1,13 @@
 export const starter={
- name:'Field Registry',sample:'1',seed:42,color:'#a4d5c8',background:'type-b',
+ name:'Field Registry',sample:'',seed:42,color:'#a4d5c8',background:'type-b',
  template:`<article>
   <header>FIELD REGISTRY <b>SPECIMEN</b></header>
   <section>
     <figure data-class="photo">
-      {% if person.photo_url %}<img src="{{ person.photo_url }}" alt="">
-      {% else %}{{ person.name[0] }}{% endif %}
+      A
     </figure>
-    <div><small>CARDHOLDER</small><h1>{{ person.name }}</h1>
-    <small>REGISTRY CODE</small><p>FR–{{ range(10000,99999)|random }}</p></div>
+    <div><small>CARDHOLDER</small><h1>Alex Rivera</h1>
+    <small>REGISTRY CODE</small><p>FR–38104</p></div>
   </section>
 </article>`,
  css:`article { padding: 35px; color: #163d39; font: 18px system-ui }
