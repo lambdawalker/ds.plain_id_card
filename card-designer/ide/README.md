@@ -49,3 +49,10 @@ shows the recipe. Bulk record.json files also include it.
 
 The shared package is in ../packages/drawing-tools. See its README for the module
 structure, browser requirements, testing and differences from Python rendering.
+
+## Dataset references
+Use the right panel's **Data sources** tab to add a ds.photo_id reference such as @DS/ds.photo_id or an absolute folder path. References persist across restarts. Select a source, search records, and click a photo to use it in the preview. Remove reference disconnects it from the IDE.
+
+Aliases use the drawing tools PathResolver, included in backend/path_resolver.py with its upstream MIT license. Configure DS in the environment or add DS=D:\datasets to ~/.lw_paths. File aliases take priority over environment variables. Relative paths resolve from the backend working directory. References currently accept the ds.photo_id manifest schema.
+
+The CARD_PHOTO_DATASET environment setting is imported once into the saved references. Subsequent additions and removals are managed in the interface.
