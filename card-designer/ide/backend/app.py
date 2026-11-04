@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from jinja2 import StrictUndefined, TemplateError
 from jinja2.sandbox import SandboxedEnvironment
+from .photo_dataset import metadata, photo_index
 from .legacy import helpers, sample_template
 from pydantic import BaseModel, Field
 
@@ -113,6 +114,22 @@ records.update({key: {"id": key, "name": file.stem, "photo_url": "/api/photos/" 
                 for key, file in photos.items()})
 
 
+photo_fields = {}
+source = os.getenv("CARD_PHOTO_DATASET")
+if not source and os.getenv("DS"):
+    candidate = Path(os.environ["DS"]) / "ds.photo_id"
+    if (candidate / "manifest.yaml").is_file():
+        source = candidate
+if source:
+    for stem, fields in photo_index(Path(source)).items():
+        key = "photo-" + sha256(stem.encode()).hexdigest()
+        url = "/api/photos/" + key
+        records[key] = {"id": key, "record_id": stem, "name": stem,
+                        "dataset": "lambdaWalker/ds.photo_id", "image": url, "photo_url": url}
+        photos[key] = fields["image"]
+        photo_fields[key] = fields
+
+
 @app.get("/api/samples")
 def samples(q: str = "", offset: int = Query(default=0, ge=0)):
     from itertools import islice
@@ -176,6 +193,11 @@ def preview(request: Preview):
     person = records.get(d.sample)
     if person is None:
         raise HTTPException(422, "Sample unavailable. Choose another record.")
+    if d.sample in photo_fields:
+        try:
+            person = {**person, **metadata(photo_fields[d.sample])}
+        except (OSError, ValueError) as exc:
+            raise HTTPException(422, f"Invalid metadata for photo record {person['record_id']}") from exc
     rng = random.Random(d.seed)
     env = SandboxedEnvironment(undefined=StrictUndefined, autoescape=True)
     env.filters["random"] = rng.choice
