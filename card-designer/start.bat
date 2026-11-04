@@ -1,6 +1,9 @@
 @echo off
 setlocal
 cd /d "%~dp0ide" || exit /b 1
+pushd ..\packages\drawing-tools
+call npm ci || exit /b 1
+popd
 pushd web
 call npm ci || exit /b 1
 call npm run build || exit /b 1

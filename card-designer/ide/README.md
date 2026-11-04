@@ -36,3 +36,16 @@ The first card uses seed 42, subsequent cards increment the seed, and selected r
 
 ## Backend boundary
 The Svelte client calls the Python service through /api. SQLite stores designs and the backend owns disk access. /docs lists the API. The same service serves the production web build for local use. The bulk command reads a saved design through HTTP and runs the same browser renderer used by the IDE.
+
+## Procedural backgrounds
+Choose the versioned Type A, B, C or D family in Background. The original Type B
+recipe remains available for existing saved designs. Type B combines gradients,
+grids and lines. Type C adds a header, Type D adds a country contour, and Type A adds both.
+
+Background parameters opens the resolved JSON recipe. Edit component parameters,
+apply them, then save the design. Reset parameters returns to seeded defaults.
+Changing the seed, color or family generates a new recipe. The Context inspector
+shows the recipe. Bulk record.json files also include it.
+
+The shared package is in ../packages/drawing-tools. See its README for the module
+structure, browser requirements, testing and differences from Python rendering.

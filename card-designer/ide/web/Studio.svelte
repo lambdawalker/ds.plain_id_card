@@ -2,13 +2,19 @@
  import {onMount} from 'svelte';
  import {formatOutput} from './format-output.js';
  import Editor from './Editor.svelte';
- import {api,renderCard} from './render.js';
+ import {api,renderCard,backgroundRecipe} from './render.js';
  import {starter} from './starter.js';
  let design={...starter}, designs=[], id=null, saved='', ready=false, busy=false;
  let preview='',output='',renderedCSS='',context={},error='',notice='',listing=false,samples=[],search='',offset=0;
  let theme=localStorage.getItem('studio-theme')||'system',zoom='fit',width=720,tab='HTML',serial=0,querySerial=0;
  let media=window.matchMedia("(prefers-color-scheme: dark)"),systemDark=media.matches;
  $: dark=theme==="dark"||(theme==="system"&&systemDark);
+ let recipeText='',recipeOpen=false;
+ function editRecipe(){recipeText=JSON.stringify(context.recipe,null,2);recipeOpen=true}
+ function applyRecipe(){
+   try{design={...design,background_recipe:JSON.parse(recipeText)};recipeOpen=false}
+   catch(e){notice=e.message}
+ }
  let left=25,right=24,assets=[];
  async function upload(e){
    const file=e.target.files[0];if(!file)return;
@@ -33,9 +39,10 @@
    return ()=>{media.removeEventListener("change",onTheme);serial++;querySerial++};
  });
  async function save(){
-   const snapshot={...design};
+   const original=JSON.stringify(design);
+   const snapshot={...design,background_recipe:await backgroundRecipe(design)};
    const result=await api(id?'designs/'+id:'designs',id?'PUT':'POST',snapshot);
-   id=result.id;saved=JSON.stringify(snapshot);await refresh();notice='Saved';
+   id=result.id;if(JSON.stringify(design)===original)design=snapshot;saved=JSON.stringify(snapshot);await refresh();notice='Saved';
  }
  async function importA(){if(!canLeave())return;const source=await api("templates/a");await open(null);design={...starter,...source,name:"ID card · A"}}
  async function newDesign(){if(!canLeave())return;const name=prompt('Design name','Untitled card');if(name?.trim()){await open(null);design={...starter,name:name.trim()}}}
@@ -45,7 +52,7 @@
    const current=++serial;
    setTimeout(async()=>{if(current!==serial)return;
      try{const result=await renderCard(d);if(current!==serial)return;
-       preview=result.html;output=result.template;renderedCSS=result.css;context={seed:d.seed,sample:result.person,background:d.background};error='';
+       preview=result.html;output=result.template;renderedCSS=result.css;context={seed:d.seed,sample:result.person,background:d.background,recipe:result.background_recipe};error='';
        const formatted=await Promise.all([formatOutput(result.template,'html'),formatOutput(result.css,'css')]);
        if(current===serial)[output,renderedCSS]=formatted;
      }catch(e){if(current===serial)error=e.message}
@@ -74,11 +81,16 @@
 <button class="primary" on:click={()=>act(save)}>Save</button><button disabled={!id} on:click={()=>act(remove)}>Delete</button>
 <span class="grow"></span><label>Theme <select bind:value={theme}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label></header>
 <div class="toolbar"><label>Design <input bind:value={design.name} maxlength="160"></label>
-<label>Background <select bind:value={design.background}><option value="type-b">Type B · Waves</option><option value="plain">Solid</option>{#each assets as a}<option value={a.id}>{a.name}</option>{/each}</select></label>
+<label>Background <select bind:value={design.background}><option value="type-b">Type B · Original recipe</option><option value="type-b-v1">Type B · Gradients, grids, lines</option><option value="type-c-v1">Type C · With header</option><option value="type-d-v1">Type D · With country</option><option value="type-a-v1">Type A · Country and header</option><option value="plain">Solid</option>{#each assets as a}<option value={a.id}>{a.name}</option>{/each}</select></label>
 <label class="import">＋ Artwork<input type="file" accept="image/png,image/jpeg,image/webp" on:change={e=>act(()=>upload(e))}></label>
 <input aria-label="Background color" type="color" bind:value={design.color}>
 <label>Seed <input class="seed" type="number" min="0" max="4294967295" bind:value={design.seed}></label>
 <button on:click={()=>design.seed=crypto.getRandomValues(new Uint32Array(1))[0]}>⟳ Randomize</button>
+<button disabled={!context.recipe} on:click={editRecipe}>Background parameters</button>
+{#if recipeOpen}<aside class="recipe-panel"><div class="bar">Background recipe <button on:click={()=>recipeOpen=false}>Close</button></div>
+<p>Change layer components and parameters. Seed, family and color must match the active background.</p>
+<textarea aria-label="Background recipe" bind:value={recipeText} spellcheck="false"></textarea>
+<button on:click={applyRecipe}>Apply</button><button on:click={()=>{design={...design,background_recipe:null};recipeOpen=false}}>Reset parameters</button></aside>{/if}
 <button aria-expanded={listing} on:click={()=>listing=!listing}>▦ Dataset · {context.sample?.name??'Browse'}</button>
 {#if listing}<aside class="picker"><div class="bar">Local dataset <button on:click={()=>listing=false}>Close</button></div>
 <input aria-label="Search dataset" placeholder="Search records…" bind:value={search} on:input={()=>offset=0}>
