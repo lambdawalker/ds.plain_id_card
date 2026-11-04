@@ -5,7 +5,8 @@
  import Icon from './Icon.svelte';
  import {api,renderCard,backgroundRecipe} from './render.js';
  import {starter} from './starter.js';
- let design={...starter}, designs=[], id=null, saved='', ready=false, busy=false;
+ import {themedDesign} from './color-theme.js';
+ let design=themedDesign({...starter}), designs=[], id=null, saved='', ready=false, busy=false;
  let preview='',output='',renderedCSS='',context={},error='',notice='';
  let theme=localStorage.getItem('studio-theme')||'system',zoom='fit',width=720,stageHeight=600,tab='HTML',serial=0;
  let media=window.matchMedia("(prefers-color-scheme: dark)"),systemDark=media.matches;
@@ -27,10 +28,17 @@
    try{design={...design,background_recipe:JSON.parse(recipeText)};recipeOpen=false}
    catch(e){recipeError=e.message}
  }
- let inspector='Inspect',datasetRefs=[],reference='',sourceError='',sourceId=null,sourceRecords=[],sourceSearch='',sourceOffset=0;
+ let inspector='Inspect',datasetRefs=[],reference='',sourceError='',sourceId=null,sourceRecords=[],sourceSearch='',sourceOffset=0,sourceImage='',sourceColumns=4;
  let sourceDialog,addError='',sourceBusy=false,sourceListLoading=true,sourceLoading=false,sourceSerial=0,datasetsBooting=true,sourcePoll,sourcesDisposed=false;
  const sourceViews=new Map();
  $: activeSource=datasetRefs.find(source=>source.id===sourceId);
+ $: sourceImageFields=activeSource?.image_fields??[...new Set(sourceRecords.flatMap(record=>Object.keys(record.images||{})))];
+ function sourcePhoto(record,field){return field?record.images?.[field]:record.photo_url}
+ $: if(design.auto_theme){
+   const generated=themedDesign(design);
+   if(generated.color!==design.color||generated.text_color!==design.text_color)design={...generated,background_recipe:null};
+ }
+ function generateColorTheme(){design={...design,auto_theme:true,seed:crypto.getRandomValues(new Uint32Array(1))[0],background_recipe:null}}
  function sourceLabel(reference){return reference.replace(/[\\/]+$/, '').split(/[\\/]/).pop()||reference}
  async function loadSources(){
    if(sourcesDisposed)return;
@@ -64,10 +72,10 @@
    finally{if(current===sourceSerial)sourceLoading=false}
  }
  async function selectSource(key){
-   if(sourceId!==null)sourceViews.set(sourceId,{search:sourceSearch,offset:sourceOffset});
+   if(sourceId!==null)sourceViews.set(sourceId,{search:sourceSearch,offset:sourceOffset,image:sourceImage,columns:sourceColumns});
    sourceId=key;
    const view=sourceViews.get(key);
-   sourceSearch=view?.search??'';
+   sourceSearch=view?.search??'';sourceImage=view?.image??'';sourceColumns=view?.columns??4;
    await browseSource(view?.offset??0);
  }
  function sourceTabKey(e,index){
@@ -117,7 +125,7 @@
  $: scale=zoom==='fit'?Math.min(1.6,Math.max(.05,Math.min((width-72)/cardWidth,(stageHeight-96)/cardHeight))):Number(zoom);
  async function refresh(){designs=await api('designs')}
  async function open(key){
-   const next=key?await api('designs/'+key):{...starter};
+   const next=themedDesign(key?await api('designs/'+key):{...starter});
    id=key; design=next; saved=JSON.stringify(next); notice='';
  }
  let actionDialog,actionResolve=null,actionKind='',actionTitle='',actionMessage='',actionLabel='',actionValue='';
@@ -149,13 +157,14 @@
  });
  async function save(){
    const original=JSON.stringify(design);
-   const snapshot={...design,background_recipe:await backgroundRecipe(design)};
+   const resolved=themedDesign(design);
+   const snapshot={...resolved,background_recipe:await backgroundRecipe(resolved)};
    const result=await api(id?'designs/'+id:'designs',id?'PUT':'POST',snapshot);
    id=result.id;if(JSON.stringify(design)===original)design=snapshot;saved=JSON.stringify(snapshot);await refresh();notice='Saved';
  }
  let templateDialog,templates=[],templatesLoading=false,templatesError='',templateSerial=0,templateOpening=null;
  let gallerySettings={};
- function currentSettings(){return {seed:design.seed,color:design.color,background:design.background,background_recipe:design.background_recipe,sample:design.sample}}
+ function currentSettings(){return {seed:design.seed,color:design.color,background:design.background,background_recipe:design.background_recipe,sample:design.sample,auto_theme:design.auto_theme,text_color:design.text_color}}
  async function showTemplates(){
    templateDialog.showModal();
    const current=++templateSerial;
@@ -256,7 +265,10 @@
 <div class="settings-controls">
 <label for="background-family">Background</label><select id="background-family" bind:value={design.background}><option value="type-b">Type B · Original recipe</option><option value="type-b-v1">Type B · Gradients, grids, lines</option><option value="type-c-v1">Type C · With header</option><option value="type-d-v1">Type D · With country</option><option value="type-a-v1">Type A · Country and header</option><option value="plain">Solid</option>{#each assets as a}<option value={a.id}>{a.name}</option>{/each}</select>
 <label class="import">＋ Artwork<input aria-label="Import artwork" type="file" accept="image/png,image/jpeg,image/webp" on:change={e=>act(()=>upload(e))}></label>
-<label for="background-color">Color</label><input id="background-color" aria-label="Background color" type="color" bind:value={design.color}>
+<label for="background-color">Color</label><input id="background-color" aria-label="Background color" type="color" bind:value={design.color} on:input={()=>{design.auto_theme=false;design.background_recipe=null}}>
+<label class="theme-toggle"><input type="checkbox" bind:checked={design.auto_theme}> Generate theme from seed</label>
+<button on:click={generateColorTheme}>Generate theme</button>
+<label for="text-color">Text color</label><input id="text-color" aria-label="Text color" type="color" value={design.text_color||'#000000'} on:input={e=>{design={...design,text_color:e.target.value,auto_theme:false}}}>
 <label for="background-seed">Seed</label><div class="seed-controls"><input id="background-seed" type="number" min="0" max="4294967295" bind:value={design.seed}><button on:click={()=>design.seed=crypto.getRandomValues(new Uint32Array(1))[0]}>⟳ Randomize</button></div>
 <button disabled={!context.recipe} on:click={editRecipe}>Background parameters</button>
 {#if recipeOpen}<div class="settings-recipe"><h3>Background recipe</h3><p>Seed, family and color must match the active background.</p>
@@ -299,10 +311,11 @@
 <div class="dataset-reference"><strong>{activeSource.reference}</strong><small>{activeSource.count} records</small><button disabled={sourceBusy||datasetsBooting} on:click={()=>removeSource(activeSource.id)}>Remove reference</button></div>
 {#if activeSource.error}<p role="alert">{activeSource.error}</p>{/if}
 <form class="source-search" on:submit|preventDefault={()=>browseSource()}><input aria-label="Search source records" placeholder="Search records…" bind:value={sourceSearch}><button>Search</button></form>
+<div class="source-display-controls"><label>Display image<select aria-label="Display image" bind:value={sourceImage}><option value="">Default image</option>{#each sourceImageFields as field}<option value={field}>{field}</option>{/each}</select></label><label>Columns<select aria-label="Dataset columns" bind:value={sourceColumns}>{#each Array.from({length:8},(_,i)=>i+1) as columns}<option value={columns}>{columns}</option>{/each}</select></label></div>
 {#if sourceError}<p role="alert">{sourceError}</p>{/if}
 {#if sourceLoading}<p role="status"><span class="source-spinner" aria-hidden="true"></span> Loading records…</p>
 {:else if !sourceError}
-<div class="records">{#each sourceRecords as record}<button on:click={()=>{design.sample=record.id;tab='Context';inspector='Inspect'}}>{#if record.photo_url}<img src={record.photo_url} alt="">{/if}{record.name}</button>{/each}</div>
+<div class="records" style={'grid-template-columns:repeat('+sourceColumns+',minmax(0,1fr))'}>{#each sourceRecords as record}<button class:selected={design.sample===record.id} aria-pressed={design.sample===record.id} on:click={()=>design.sample=record.id}>{#if sourcePhoto(record,sourceImage)}<img src={sourcePhoto(record,sourceImage)} alt="">{:else}<span class="missing-thumbnail">{sourceImage?'No '+sourceImage:'No image'}</span>{/if}{record.name}</button>{/each}</div>
 {#if !sourceRecords.length}<p>No matching records.</p>{/if}
 {/if}
 <div class="source-pagination"><button disabled={sourceLoading||!sourceOffset} on:click={()=>browseSource(sourceOffset-24)}>Previous</button>

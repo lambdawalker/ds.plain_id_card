@@ -1,4 +1,5 @@
 export const starter={
+ auto_theme:true,text_color:'#000000',
  name:'Field Registry',sample:'',seed:42,color:'#a4d5c8',background:'type-b',
  template:`<article>
   <header>FIELD REGISTRY <b>SPECIMEN</b></header>
@@ -10,7 +11,7 @@ export const starter={
     <small>REGISTRY CODE</small><p>FR–38104</p></div>
   </section>
 </article>`,
- css:`article { padding: 35px; color: #163d39; font: 18px system-ui }
+ css:`article { padding: 35px; color: {{ env.theme.text_color.to_rgb_hex() }}; font: 18px system-ui }
 header { display:flex; justify-content:space-between; letter-spacing:.18em }
 b { border:1px solid; padding:2px 8px; font-size:12px }
 section { display:flex; align-items:center; gap:28px; margin-top:42px }

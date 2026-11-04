@@ -220,8 +220,9 @@ def build_context(snapshot, design, person, rng):
     ordinal = next((i for i, row in enumerate(rows) if row['id'] == person.get('id')), seed)
     data = {**person, 'id': person.get('record_id', person.get('name', str(seed))), 'index': ordinal}
     color = get('color', '#000000')
+    text_color = get('text_color', '#000000')
     summary = {'data': data, 'common': get('common', {}) or {},
-               'env': {'theme': {'primary_color': color, 'text_color': '#000000'}},
+               'env': {'theme': {'primary_color': color, 'text_color': text_color}},
                'datasets': {}, 'sources': [dict(source) for source in snapshot.get('sources', [])],
                'missing': [], 'generator': {'kind': 'synthetic', 'seed': seed}}
     ds = DatasetHandler(snapshot, person, ordinal, rng, summary)
@@ -232,6 +233,6 @@ def build_context(snapshot, design, person, rng):
     gen = SimpleNamespace(text=text, random=RandomGenerator(rng), time=TimeGenerator(rng),
                           address=AddressGenerator(rng, text, person))
     context = {'person': person, 'data': data, 'seed': seed, 'common': summary['common'],
-               'env': SimpleNamespace(theme=SimpleNamespace(primary_color=Color(color), text_color=Color('#000000'))),
+               'env': SimpleNamespace(theme=SimpleNamespace(primary_color=Color(color), text_color=Color(text_color))),
                'gen': gen, 'ds': ds}
     return context, summary

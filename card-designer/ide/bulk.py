@@ -57,7 +57,8 @@ def main():
                 card.screenshot(path=str(stage / "card.png"))
                 (stage / "record.json").write_text(json.dumps(dict(design_id=args.design,
                     seed=design["seed"], sample=design["sample"], background=design["background"],
-                    background_recipe=rendered.get("background_recipe"), elements=boxes), indent=2))
+                    background_recipe=rendered.get("background_recipe"),
+                    theme=rendered.get("context", {}).get("env", {}).get("theme", {}), elements=boxes), indent=2))
                 stage.rename(target)
         browser.close()
 
