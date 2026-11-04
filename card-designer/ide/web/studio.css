@@ -25,3 +25,8 @@
 .source-dialog input{width:100%;min-width:0}
 .dialog-actions{margin-top:20px}
 .dataset-tabs button:focus-visible,.add-source:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
+
+.source-spinner{display:inline-block;width:12px;height:12px;vertical-align:-1px;margin-right:4px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:source-spin .8s linear infinite;flex-shrink:0}
+.dataset-tabs button:disabled[aria-selected=true]{opacity:1}
+@keyframes source-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.source-spinner{animation:none}}
