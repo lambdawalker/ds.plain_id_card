@@ -5,4 +5,5 @@
 .import{position:relative;cursor:pointer;border:1px solid var(--line);background:var(--panel);border-radius:5px;padding:6px}.import input{position:absolute;inset:0;opacity:0;cursor:pointer}
 .ruler{height:8px;border-bottom:1px solid var(--line);background-image:linear-gradient(to right,var(--muted) 1px,transparent 1px);margin-bottom:8px}
 
+.recipe-panel{position:absolute;z-index:6;right:12px;top:100%;width:min(650px,95vw);padding:12px;background:var(--panel);border:1px solid var(--line)}.recipe-panel textarea{width:100%;height:45vh;background:var(--bg);color:var(--ink);font:13px monospace}
 .dataset-explorer{padding:12px;overflow:auto;min-height:0}.dataset-explorer form,.dataset-explorer label{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.dataset-explorer input,.dataset-explorer select{width:100%;min-width:0}.dataset-reference{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:12px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}.dataset-reference strong{width:100%}.dataset-explorer .records{grid-template-columns:repeat(2,minmax(0,1fr))}.inspect>.editor{flex:1}

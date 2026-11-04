@@ -37,7 +37,8 @@ def main():
             if target.exists():
                 raise FileExistsError(target)
             design.update(seed=(first + i) % 2**32, sample=samples[i % len(samples)])
-            html = engine.evaluate("async d => (await window.cardDesignerRender(d)).html", design)
+            rendered = engine.evaluate("d => window.cardDesignerRender(d)", design)
+            html = rendered["html"]
             page.set_content('<iframe sandbox="" style="display:block;border:0;width:640px;height:400px"></iframe><style>body{margin:0}</style>')
             page.locator("iframe").evaluate("(frame, html) => frame.srcdoc = html", html)
             card = page.frame_locator("iframe").locator("#view-port")
@@ -54,7 +55,8 @@ def main():
                 stage.mkdir()
                 card.screenshot(path=str(stage / "card.png"))
                 (stage / "record.json").write_text(json.dumps(dict(design_id=args.design,
-                    seed=design["seed"], sample=design["sample"], elements=boxes), indent=2))
+                    seed=design["seed"], sample=design["sample"], background=design["background"],
+                    background_recipe=rendered.get("background_recipe"), elements=boxes), indent=2))
                 stage.rename(target)
         browser.close()
 

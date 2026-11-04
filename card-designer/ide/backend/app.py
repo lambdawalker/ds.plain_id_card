@@ -29,7 +29,8 @@ class Design(BaseModel):
     css: str
     seed: int = Field(ge=0, le=4294967295)
     color: str = Field(pattern=r"^#[0-9a-fA-F]{6}$")
-    background: str = Field(pattern=r"^(type-b|plain|asset-[0-9a-f]{64})$")
+    background: str = Field(pattern=r"^(type-b|type-[abcd]-v1|plain|asset-[0-9a-f]{64})$")
+    background_recipe: dict | None = None
     sample: str
 
 
