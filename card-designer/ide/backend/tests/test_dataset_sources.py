@@ -33,6 +33,28 @@ class DatasetSourcesTest(unittest.TestCase):
         (root / "manifest.yaml").write_text(json.dumps(manifest))
         return root
 
+    def test_no_builtin_people_and_static_preview_needs_no_sample(self):
+        self.assertEqual(service.samples(offset=0), [])
+        design = service.Design(name="static", template="<h1>Alex Rivera</h1>", css="", seed=1,
+                                color="#ffffff", background="plain", sample="")
+        result = service.preview(service.Preview(design=design))
+        self.assertEqual(result["template"], "<h1>Alex Rivera</h1>")
+        self.assertEqual(result["person"], {})
+
+    def test_template_a_contains_static_content_without_demo_generators(self):
+        source = service.template_a()
+        self.assertNotIn("gen.", source["template"] + source["css"])
+        self.assertNotIn("{{", source["template"] + source["css"])
+        design = service.Design(name="A", **source, seed=1, color="#ffffff", background="plain", sample="")
+        self.assertIn("Alex Rivera", service.preview(service.Preview(design=design))["template"])
+
+    def test_unknown_selected_sample_still_reports_an_error(self):
+        design = service.Design(name="missing", template="<p>text</p>", css="", seed=1,
+                                color="#ffffff", background="plain", sample="missing")
+        with self.assertRaises(HTTPException) as error:
+            service.preview(service.Preview(design=design))
+        self.assertEqual(error.exception.status_code, 422)
+
     def test_other_dataset_id_and_optional_photo_sidecars(self):
         root = self.dataset()
         self.assertEqual(photo_index(root)["001"]["image"], root / "img/001.png")

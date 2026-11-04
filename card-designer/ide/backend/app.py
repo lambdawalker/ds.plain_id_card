@@ -17,7 +17,7 @@ from jinja2.sandbox import SandboxedEnvironment
 from .path_resolver import resolve
 from threading import RLock
 from .photo_dataset import metadata, photo_index
-from .legacy import helpers, sample_template
+from .legacy import sample_template
 from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,7 +49,7 @@ class Design(BaseModel):
     color: str = Field(pattern=r"^#[0-9a-fA-F]{6}$")
     background: str = Field(pattern=r"^(type-b|type-[abcd]-v1|plain|asset-[0-9a-f]{64})$")
     background_recipe: dict | None = None
-    sample: str
+    sample: str = ""
 
 
 class Preview(BaseModel):
@@ -129,8 +129,7 @@ if os.getenv("CARD_PHOTOS"):
             key = sha256(file.relative_to(folder).as_posix().encode()).hexdigest()
             photos[key] = file
 
-records = {str(i): {"id": str(i), "name": name, "photo_url": ""} for i, name in
-           enumerate(["Alex Rivera", "Maya Chen", "Jordan Mills", "Lena Ortiz"], 1)}
+records = {}
 records.update({key: {"id": key, "name": file.stem, "photo_url": "/api/photos/" + key}
                 for key, file in photos.items()})
 
@@ -306,7 +305,7 @@ def template_a():
 @app.post("/api/preview")
 def preview(request: Preview):
     d = request.design
-    person = records.get(d.sample)
+    person = records.get(d.sample) if d.sample else {}
     if person is None:
         raise HTTPException(422, "Sample unavailable. Choose another record.")
     if d.sample in photo_fields:
@@ -319,11 +318,10 @@ def preview(request: Preview):
     rng = random.Random(d.seed)
     env = SandboxedEnvironment(undefined=StrictUndefined, autoescape=True)
     env.filters["random"] = rng.choice
-    gen = helpers(rng)
     result = {}
     for field in ("template", "css"):
         try:
-            result[field] = env.from_string(getattr(d, field)).render(person=person, seed=d.seed, gen=gen, data=person)
+            result[field] = env.from_string(getattr(d, field)).render(person=person, seed=d.seed, data=person)
         except (TemplateError, IndexError, ArithmeticError, ValueError, TypeError) as exc:
             raise HTTPException(422, f"{field}, line {getattr(exc, 'lineno', '?')}: {exc}") from exc
     return {**result, "person": person}
