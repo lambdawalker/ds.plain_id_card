@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from threading import Event, Thread, Barrier, get_ident
 from unittest.mock import patch
 
 from fastapi import HTTPException
@@ -54,6 +55,112 @@ class DatasetSourcesTest(unittest.TestCase):
         with self.assertRaises(HTTPException) as error:
             service.preview(service.Preview(design=design))
         self.assertEqual(error.exception.status_code, 422)
+
+    def test_startup_indexes_in_background_and_dataset_reads_use_cache(self):
+        root = self.dataset()
+        with service.database() as db:
+            db.execute("INSERT INTO dataset_source(reference) VALUES (?)", (str(root),))
+        started, release = Event(), Event()
+        original = service.index_reference
+        def slow_index(reference):
+            started.set()
+            if not release.wait(3):
+                raise RuntimeError("Test did not release indexer")
+            return original(reference)
+        async def scenario():
+            try:
+                async with service.lifespan(service.app):
+                    self.assertTrue(started.wait(1))
+                    self.assertTrue(service.dataset_status()["loading"])
+                    pending = service.datasets()
+                    self.assertEqual(pending[0]["reference"], str(root))
+                    self.assertTrue(pending[0]["loading"])
+                    self.assertEqual(service.designs(), [])
+                    release.set()
+                    await asyncio.to_thread(service.app.state.dataset_thread.join, 2)
+                    self.assertFalse(service.dataset_status()["loading"])
+                    self.assertEqual(service.datasets()[0]["count"], 1)
+                    with patch.object(service, "index_reference", side_effect=AssertionError("GET rescanned dataset")):
+                        self.assertEqual(service.datasets()[0]["count"], 1)
+            finally:
+                release.set()
+        with patch.dict(os.environ, {"CARD_PHOTOS":"", "CARD_PHOTO_DATASET":"", "DS":""}), patch.object(service, "index_reference", side_effect=slow_index):
+            asyncio.run(scenario())
+
+    def test_removal_during_startup_does_not_restore_deleted_reference(self):
+        root = self.dataset()
+        with service.database() as db:
+            key = db.execute("INSERT INTO dataset_source(reference) VALUES (?)", (str(root),)).lastrowid
+        started, release, removed = Event(), Event(), Event()
+        original = service.index_reference
+        def slow_index(reference):
+            started.set()
+            if not release.wait(3):
+                raise RuntimeError("Test did not release indexer")
+            return original(reference)
+        async def scenario():
+            try:
+                async with service.lifespan(service.app):
+                    self.assertTrue(started.wait(1))
+                    def remove():
+                        service.remove_dataset(key)
+                        removed.set()
+                    thread = Thread(target=remove)
+                    thread.start()
+                    self.assertTrue(service.dataset_status()["loading"])
+                    release.set()
+                    self.assertTrue(await asyncio.to_thread(removed.wait, 2))
+                    thread.join(1)
+                    self.assertEqual(service.datasets(), [])
+                    self.assertEqual(service.samples(offset=0), [])
+            finally:
+                release.set()
+        with patch.dict(os.environ, {"CARD_PHOTOS":"", "CARD_PHOTO_DATASET":"", "DS":""}), patch.object(service, "index_reference", side_effect=slow_index):
+            asyncio.run(scenario())
+
+    def test_datasets_scan_in_distinct_parallel_threads(self):
+        roots = [self.dataset("dataset-a"), self.dataset("dataset-b")]
+        with service.database() as db:
+            db.executemany("INSERT INTO dataset_source(reference) VALUES (?)", [(str(root),) for root in roots])
+        barrier = Barrier(2, timeout=2)
+        workers = set()
+        original = service.index_reference
+        def parallel_index(reference):
+            workers.add(get_ident())
+            barrier.wait()
+            return original(reference)
+        with patch.object(service, "index_reference", side_effect=parallel_index):
+            sources = service.rebuild_sources()
+        self.assertEqual(len(workers), 2)
+        self.assertNotIn(get_ident(), workers)
+        self.assertEqual([source["count"] for source in sources], [1, 1])
+
+    def test_shutdown_does_not_wait_for_a_stalled_dataset(self):
+        root = self.dataset()
+        with service.database() as db:
+            db.execute("INSERT INTO dataset_source(reference) VALUES (?)", (str(root),))
+        started, release = Event(), Event()
+        def stalled(reference):
+            started.set()
+            release.wait()
+            return photo_index(root)
+        async def scenario():
+            async with service.lifespan(service.app):
+                self.assertTrue(started.wait(1))
+            self.assertFalse(service.app.state.dataset_thread.is_alive())
+        with patch.dict(os.environ, {"CARD_PHOTOS":"", "CARD_PHOTO_DATASET":"", "DS":""}), patch.object(service, "index_reference", side_effect=stalled):
+            try:
+                asyncio.run(asyncio.wait_for(scenario(), 2))
+            finally:
+                release.set()
+
+    def test_background_failure_settles_loading_and_reports_error(self):
+        async def scenario():
+            async with service.lifespan(service.app):
+                await asyncio.to_thread(service.app.state.dataset_thread.join, 2)
+                self.assertEqual(service.dataset_status(), {"loading": False, "error": "Drive unavailable"})
+        with patch.object(service, "load_loose_photos", side_effect=OSError("Drive unavailable")), self.assertLogs("uvicorn.error", level="ERROR"):
+            asyncio.run(scenario())
 
     def test_other_dataset_id_and_optional_photo_sidecars(self):
         root = self.dataset()
