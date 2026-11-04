@@ -30,7 +30,7 @@
    catch(e){sourceError=e.message}
  }
  onMount(()=>{loadSources().catch(e=>sourceError=e.message)});
- let left=25,right=24,assets=[];
+ let left=25,right=24,templateHeight=50,sourceEditors,assets=[];
  async function upload(e){
    const file=e.target.files[0];if(!file)return;
    const res=await fetch('/api/artwork?name='+encodeURIComponent(file.name),{method:'POST',headers:{'Content-Type':file.type},body:file});
@@ -81,6 +81,19 @@
  }
  $: if(listing)list(search,offset);
  function key(e){if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();act(save)}if(e.key==='Escape')listing=false}
+ function resizeSource(e){
+   const handle=e.currentTarget;
+   const bounds=sourceEditors.getBoundingClientRect();
+   handle.setPointerCapture(e.pointerId);
+   handle.onpointermove=event=>templateHeight=Math.max(15,Math.min(85,100*(event.clientY-bounds.top)/bounds.height));
+   const release=()=>{handle.onpointermove=null;handle.onpointerup=null;handle.onpointercancel=null};
+   handle.onpointerup=release;handle.onpointercancel=release;
+ }
+ function sourceResizeKey(e){
+   if(!['ArrowUp','ArrowDown','Home','End'].includes(e.key))return;
+   e.preventDefault();
+   templateHeight=e.key==='Home'?15:e.key==='End'?85:Math.max(15,Math.min(85,templateHeight+(e.key==='ArrowDown'?5:-5)));
+ }
  function resize(e,side){
    const handle=e.currentTarget;handle.setPointerCapture(e.pointerId);
    handle.onpointermove=event=>{const percent=100*event.clientX/window.innerWidth;
@@ -114,8 +127,11 @@
 <button disabled={!offset} on:click={()=>offset-=24}>Previous</button><button disabled={samples.length<24} on:click={()=>offset+=24}>Next</button></aside>{/if}</div>
 <main style={'--left:'+left+'%;--right:'+right+'%'}>
 <section class="sources"><div class="bar">01 / SOURCE <small>EDITABLE</small></div>
-<h3>◇ Template <em>HTML / Jinja</em></h3><Editor {dark} value={design.template} label="Template source" change={v=>design.template=v}/>
-<h3># Stylesheet <em>CSS / Jinja</em></h3><Editor {dark} value={design.css} language="css" label="CSS source" change={v=>design.css=v}/></section>
+<div class="source-editors" style={'--template-height:'+templateHeight+'%'} bind:this={sourceEditors}>
+<div class="source-pane"><h3>◇ Template <em>HTML / Jinja</em></h3><Editor {dark} value={design.template} label="Template source" change={v=>design.template=v}/></div>
+<button class="grip row-grip" aria-label="Resize template and stylesheet panels" aria-valuenow={templateHeight} aria-valuemin="15" aria-valuemax="85" role="separator" aria-orientation="horizontal" on:pointerdown={resizeSource} on:keydown={sourceResizeKey}></button>
+<div class="source-pane"><h3># Stylesheet <em>CSS / Jinja</em></h3><Editor {dark} value={design.css} language="css" label="CSS source" change={v=>design.css=v}/></div>
+</div></section>
 <button class="grip" aria-label="Resize source panel" on:pointerdown={e=>resize(e,'left')} on:keydown={e=>{if(e.key==='ArrowRight')left=Math.min(38,left+1);if(e.key==='ArrowLeft')left=Math.max(15,left-1)}}></button>
 <section class="canvas"><div class="bar">02 / PREVIEW <select aria-label="Zoom" bind:value={zoom}><option value="fit">Fit</option><option value=".5">50%</option><option value="1">100%</option><option value="1.5">150%</option></select></div>
 <div class="stage" bind:clientWidth={width}><div class="art"><div class="ruler" aria-hidden="true" style={"background-size:"+scale*32+"px 100%"}></div><small>SPECIMEN　 /　640 × 400</small><div style={'width:'+640*scale+'px;height:'+400*scale+'px'}><iframe title="Card preview" sandbox="" srcdoc={preview} style={'transform:scale('+scale+')'}></iframe></div></div></div>

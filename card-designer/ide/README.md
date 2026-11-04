@@ -1,5 +1,5 @@
 # Card Designer Studio
-The preview-first workspace keeps HTML/Jinja and CSS/Jinja on the left, a zoomable specimen in the center, and the evaluated HTML, CSS and record context on the right. Drag the dividers or focus one and use the arrow keys. The System, Light and Dark options affect the IDE chrome.
+The preview-first workspace keeps HTML/Jinja and CSS/Jinja on the left, a zoomable specimen in the center, and the evaluated HTML, CSS and record context on the right. Drag the dividers or focus one and use the arrow keys. The preview stays a fixed distance below its toolbar. Editors scroll horizontally and vertically without wrapping long lines. Drag the horizontal divider between Template and Stylesheet (or use its Up/Down arrow keys) to adjust their heights. Use the bottom-right handle on the right panel to resize its height. The System, Light and Dark options affect the IDE chrome.
 
 ## Start on Windows
 Install uv and Node.js 22.12+ with npm. Run **card-designer\start.bat** and open http://127.0.0.1:8765. The launcher builds the UI and uses uv to provision Python 3.12 and the API dependencies.
