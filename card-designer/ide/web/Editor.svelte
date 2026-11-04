@@ -10,7 +10,7 @@
  const colors=new Compartment();
  let host,view;
  onMount(()=>{
-   view=new EditorView({parent:host,doc:value,extensions:[colors.of(dark?oneDark:[]),basicSetup,language==='css'?css():language==='json'?json():html(),EditorState.readOnly.of(readOnly),EditorView.editable.of(!readOnly),EditorView.lineWrapping,EditorView.contentAttributes.of({'aria-label':label,...(readOnly?{'role':'textbox','aria-readonly':'true',tabindex:'0'}:{})}),EditorView.updateListener.of(u=>{if(u.docChanged) change(u.state.doc.toString())})]});
+   view=new EditorView({parent:host,doc:value,extensions:[colors.of(dark?oneDark:[]),basicSetup,language==='css'?css():language==='json'?json():html(),EditorState.readOnly.of(readOnly),EditorView.editable.of(!readOnly),EditorView.contentAttributes.of({'aria-label':label,...(readOnly?{'role':'textbox','aria-readonly':'true',tabindex:'0'}:{})}),EditorView.updateListener.of(u=>{if(u.docChanged) change(u.state.doc.toString())})]});
    return ()=>view.destroy();
  });
  $: if(view)view.dispatch({effects:colors.reconfigure(dark?oneDark:[])});
