@@ -92,5 +92,9 @@
 {#if error}<div role="alert">{error}</div>{/if}</section>
 <button class="grip" aria-label="Resize inspector" on:pointerdown={e=>resize(e,'right')} on:keydown={e=>{if(e.key==='ArrowLeft')right=Math.min(38,right+1);if(e.key==='ArrowRight')right=Math.max(15,right-1)}}></button>
 <section class="inspect"><div class="bar">03 / INSPECT <small>READ ONLY</small></div><nav>{#each ['HTML','CSS','Context'] as t}<button class:active={tab===t} on:click={()=>tab=t}>{t}</button>{/each}</nav>
-<pre>{tab==='HTML'?output:tab==='CSS'?renderedCSS:JSON.stringify(context,null,2)}</pre></section></main>
+{#key tab}
+  <Editor readOnly {dark} label={`Rendered ${tab}`}
+    language={tab==='Context'?'json':tab.toLowerCase()}
+    value={tab==='HTML'?output:tab==='CSS'?renderedCSS:JSON.stringify(context,null,2)} />
+{/key}</section></main>
 <footer>{notice|| (dirty?'● Modified':id?'● Saved locally':'New draft')} <span>Design {id??"draft"}　 /　 Seed {design.seed}</span></footer>

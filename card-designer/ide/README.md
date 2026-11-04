@@ -2,7 +2,7 @@
 The preview-first workspace keeps HTML/Jinja and CSS/Jinja on the left, a zoomable specimen in the center, and the evaluated HTML, CSS and record context on the right. Drag the dividers or focus one and use the arrow keys. The System, Light and Dark options affect the IDE chrome.
 
 ## Start on Windows
-Install Python 3.10+ and Node.js 22.12+ with npm. Run **start.bat** in this directory and open http://127.0.0.1:8765. The launcher creates a local Python environment, installs the locked web dependencies, builds the UI and starts the API. The standalone prototype and the original dataset scripts have separate entry points.
+Install uv and Node.js 22.12+ with npm. Run **card-designer\start.bat** and open http://127.0.0.1:8765. The launcher builds the UI and uses uv to provision Python 3.12 and the API dependencies.
 
 On macOS or Linux, from this directory:
 
@@ -20,16 +20,15 @@ Preview randomness is request-local. The Jinja random filter and the A-template 
 Four fictional text records work immediately. To browse real local face photos, set CARD_PHOTOS to the image directory before launch. For example, in PowerShell:
 
     $env:CARD_PHOTOS = 'D:\datasets\ds.photo_id\body'
-    .\start.bat
+    ..\start.bat
 
 The API indexes JPEG, PNG and WebP files recursively at startup. The filename stem is the display name and the relative path determines a stable record ID. Select a record in Dataset; its ID and photo URL appear in Context. Restart the server after adding files. Use **Artwork** to import a separate background. SQLite and imported artwork live under data/; set CARD_DATA to relocate them.
 
 ## Render a batch
 Save a design and read its numeric ID from the status bar. With the server running, open a second terminal in this directory. On Windows:
 
-    .venv\Scripts\python -m pip install playwright
-    .venv\Scripts\python -m playwright install chromium
-    .venv\Scripts\python bulk.py --design 1 --seed 42 --count 10 --samples 1 2 --output batch-01
+    uv run --no-project --python 3.12 --with playwright python -m playwright install chromium
+    uv run --no-project --python 3.12 --with playwright python bulk.py --design 1 --seed 42 --count 10 --samples 1 2 --output batch-01
 
 The first card uses seed 42, subsequent cards increment the seed, and selected records cycle in order. Omitting --samples and --seed uses the saved selections. Each completed directory contains card.png and record.json with seed, sample ID and data-class bounding boxes in card pixels. Choose a fresh output directory for a repeat run. This exporter has a separate format from the original JPEG dataset pipeline.
 
