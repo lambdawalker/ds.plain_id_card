@@ -16,20 +16,35 @@
    catch(e){notice=e.message}
  }
  let inspector='Inspect',datasetRefs=[],reference='',sourceError='',sourceId=null,sourceRecords=[],sourceSearch='',sourceOffset=0;
- let sourceDialog,addError='',sourceBusy=false,sourceListLoading=true,sourceLoading=false,sourceSerial=0;
+ let sourceDialog,addError='',sourceBusy=false,sourceListLoading=true,sourceLoading=false,sourceSerial=0,datasetsBooting=true,sourcePoll,sourcesDisposed=false;
  const sourceViews=new Map();
  $: activeSource=datasetRefs.find(source=>source.id===sourceId);
  function sourceLabel(reference){return reference.replace(/[\\/]+$/, '').split(/[\\/]/).pop()||reference}
  async function loadSources(){
-   try{datasetRefs=await api('datasets')}
-   catch(e){sourceError=e.message;return}
-   finally{sourceListLoading=false}
-   await selectSource(datasetRefs[0]?.id??null);
+   if(sourcesDisposed)return;
+   try{
+     const status=await api('datasets/status');
+     const sources=await api('datasets');
+     if(sourcesDisposed)return;
+     const wasLoading=datasetsBooting;
+     datasetRefs=sources;datasetsBooting=status.loading;
+     sourceListLoading=datasetsBooting&&!datasetRefs.length;
+     if(sourceId===null)await selectSource(datasetRefs[0]?.id??null);
+     else await browseSource(sourceOffset);
+     if(sourcesDisposed)return;
+     if(status.error)sourceError=status.error;
+     if(wasLoading&&!datasetsBooting){
+       if(ready)schedule({...design});
+       if(listing)list(search,offset);
+     }
+   }catch(e){sourceError=e.message;sourceListLoading=false;datasetsBooting=false}
+   finally{if(!sourcesDisposed&&datasetsBooting)sourcePoll=setTimeout(loadSources,500)}
  }
  async function browseSource(start=0){
    const current=++sourceSerial;
    sourceOffset=start;sourceRecords=[];sourceError='';sourceLoading=sourceId!==null;
    if(sourceId===null)return;
+   if(datasetRefs.find(source=>source.id===sourceId)?.loading)return;
    try{
      const records=await api('samples?offset='+start+'&q='+encodeURIComponent(sourceSearch)+'&source_id='+sourceId);
      if(current===sourceSerial)sourceRecords=records;
@@ -53,7 +68,7 @@
  }
  function showSourceDialog(){reference='';addError='';sourceDialog.showModal()}
  async function addSource(){
-   if(sourceBusy||!reference.trim())return;
+   if(sourceBusy||datasetsBooting||!reference.trim())return;
    sourceBusy=true;addError='';
    try{
      const addedReference=reference.trim();
@@ -64,7 +79,7 @@
    finally{sourceBusy=false}
  }
  async function removeSource(key){
-   if(sourceBusy)return;
+   if(sourceBusy||datasetsBooting)return;
    sourceBusy=true;sourceError='';
    const index=datasetRefs.findIndex(source=>source.id===key);
    try{
@@ -74,7 +89,7 @@
    }catch(e){sourceError=e.message}
    finally{sourceBusy=false}
  }
- onMount(()=>{loadSources().catch(e=>sourceError=e.message)});
+ onMount(()=>{loadSources();return ()=>{sourcesDisposed=true;clearTimeout(sourcePoll);sourceSerial++}});
  let left=25,right=24,templateHeight=50,sourceEditors,templateEditor,cssEditor,assets=[];
  async function upload(e){
    const file=e.target.files[0];if(!file)return;
@@ -169,7 +184,7 @@
 <button disabled={!design.sample} on:click={()=>{design.sample='';listing=false}}>Clear selection · static preview</button>
 <input aria-label="Search dataset" placeholder="Search records…" bind:value={search} on:input={()=>offset=0}>
 <div class="records">{#each samples as p}<button on:click={()=>{design.sample=p.id;listing=false}}>{#if p.photo_url}<img src={p.photo_url} alt="">{:else}<b>{p.name[0]}</b>{/if}{p.name}</button>{/each}</div>
-{#if !samples.length}<p>No matching records.</p>{/if}
+{#if datasetsBooting}<p role="status"><span class="source-spinner" aria-hidden="true"></span> Loading datasets…</p>{:else if !samples.length}<p>No matching records.</p>{/if}
 <button disabled={!offset} on:click={()=>offset-=24}>Previous</button><button disabled={samples.length<24} on:click={()=>offset+=24}>Next</button></aside>{/if}</div>
 <main style={'--left:'+left+'%;--right:'+right+'%'}>
 <section class="sources"><div class="bar">01 / SOURCE <small>EDITABLE</small></div>
@@ -195,14 +210,14 @@
 <button id={'source-tab-'+source.id} role="tab" aria-selected={sourceId===source.id} aria-controls={'source-panel-'+source.id} tabindex={sourceId===source.id?0:-1} class:active={sourceId===source.id} title={source.reference} disabled={sourceBusy} on:click={()=>selectSource(source.id)} on:keydown={e=>sourceTabKey(e,index)}>{#if sourceId===source.id&&sourceLoading}<span class="source-spinner" aria-hidden="true"></span>{/if}{sourceLabel(source.reference)}</button>
 {/each}
 </div>
-<button class="add-source" aria-label="Add dataset reference" title="Add dataset reference" disabled={sourceListLoading} on:click={showSourceDialog}>+</button>
+<button class="add-source" aria-label="Add dataset reference" title="Add dataset reference" disabled={sourceListLoading||datasetsBooting} on:click={showSourceDialog}>+</button>
 </div>
 <div class="dataset-explorer" aria-busy={sourceListLoading||sourceLoading}>
 {#if sourceListLoading}
 <div id="sources-loading-panel" role="status"><span class="source-spinner" aria-hidden="true"></span> Loading datasets…</div>
 {:else if activeSource}
 <div id={'source-panel-'+activeSource.id} role="tabpanel" aria-labelledby={'source-tab-'+activeSource.id} tabindex="0">
-<div class="dataset-reference"><strong>{activeSource.reference}</strong><small>{activeSource.count} records</small><button disabled={sourceBusy} on:click={()=>removeSource(activeSource.id)}>Remove reference</button></div>
+<div class="dataset-reference"><strong>{activeSource.reference}</strong><small>{activeSource.count} records</small><button disabled={sourceBusy||datasetsBooting} on:click={()=>removeSource(activeSource.id)}>Remove reference</button></div>
 {#if activeSource.error}<p role="alert">{activeSource.error}</p>{/if}
 <form class="source-search" on:submit|preventDefault={()=>browseSource()}><input aria-label="Search source records" placeholder="Search records…" bind:value={sourceSearch}><button>Search</button></form>
 {#if sourceError}<p role="alert">{sourceError}</p>{/if}

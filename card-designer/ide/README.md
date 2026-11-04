@@ -69,3 +69,8 @@ Run the backend regression checks from this directory with `python -m unittest d
 
 ### Multiple image fields
 Each rawImage field is exposed as an image URL in Context and templates: for example, `<img src="{{ person.slim_barcode }}">`. The `person.images` mapping contains all image fields by their exact manifest names, including any names reserved for record identity. Files across fields join by filename stem. Records with any available image can be browsed; absent secondary fields are omitted. The `person.image` and `person.photo_url` aliases choose the field named image when available, otherwise the first available rawImage field in manifest order. JPG/JPEG/PNG/WebP filtering applies to every image folder.
+
+## Startup dataset loading
+The server starts serving the IDE immediately and warms saved dataset references in the background. Separate workers index datasets concurrently, with up to eight active scans. Loose CARD_PHOTOS files and first-run environment discovery also run after startup. Dataset list reads use the cached index instead of rescanning folders. Add/remove operations update the index and serialize with startup loading.
+
+The UI polls `/api/datasets/status` while startup indexing runs, keeps referenced tabs visible with loading indicators, and refreshes records and saved previews when ready. A selected record that is still loading returns HTTP 503; static templates remain usable. Background failures are logged and shown in the dataset panel. Restart the server to pick up files added to connected folders. Shutdown cancels queued work and does not wait indefinitely for a blocked filesystem scan.
