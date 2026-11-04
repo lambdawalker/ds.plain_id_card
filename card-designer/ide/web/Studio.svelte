@@ -16,11 +16,16 @@
    catch(e){notice=e.message}
  }
  let inspector='Inspect',datasetRefs=[],reference='',sourceError='',sourceId=null,sourceRecords=[],sourceSearch='',sourceOffset=0;
- let sourceDialog,addError='',sourceBusy=false,sourceLoading=false,sourceSerial=0;
+ let sourceDialog,addError='',sourceBusy=false,sourceListLoading=true,sourceLoading=false,sourceSerial=0;
  const sourceViews=new Map();
  $: activeSource=datasetRefs.find(source=>source.id===sourceId);
  function sourceLabel(reference){return reference.replace(/[\\/]+$/, '').split(/[\\/]/).pop()||reference}
- async function loadSources(){datasetRefs=await api('datasets');await selectSource(datasetRefs[0]?.id??null)}
+ async function loadSources(){
+   try{datasetRefs=await api('datasets')}
+   catch(e){sourceError=e.message;return}
+   finally{sourceListLoading=false}
+   await selectSource(datasetRefs[0]?.id??null);
+ }
  async function browseSource(start=0){
    const current=++sourceSerial;
    sourceOffset=start;sourceRecords=[];sourceError='';sourceLoading=sourceId!==null;
@@ -178,24 +183,29 @@
 {#if error}<div role="alert">{error}</div>{/if}</section>
 <button class="grip" aria-label="Resize inspector" on:pointerdown={e=>resize(e,'right')} on:keydown={e=>{if(e.key==='ArrowLeft')right=Math.min(38,right+1);if(e.key==='ArrowRight')right=Math.max(15,right-1)}}></button>
 <section class="inspect"><div class="bar">03 / EXPLORE</div>
-<nav aria-label="Right panel">{#each ['Inspect','Data sources'] as panel}<button class:active={inspector===panel} on:click={()=>{inspector=panel;if(panel==='Data sources')browseSource(sourceOffset)}}>{panel}</button>{/each}</nav>
+<nav aria-label="Right panel">{#each ['Inspect','Data sources'] as panel}<button class:active={inspector===panel} on:click={()=>{inspector=panel;if(panel==='Data sources'&&!sourceListLoading&&sourceId!==null)browseSource(sourceOffset)}}>{panel}</button>{/each}</nav>
 {#if inspector==='Data sources'}
 <div class="dataset-tabs-bar">
-<div class="dataset-tabs" role="tablist" aria-label="Dataset references">
+<div class="dataset-tabs" role="tablist" aria-label="Dataset references" aria-busy={sourceListLoading}>
+{#if sourceListLoading}
+<button class="active" role="tab" aria-selected="true" aria-controls="sources-loading-panel" disabled><span class="source-spinner" aria-hidden="true"></span>Loading datasets…</button>
+{/if}
 {#each datasetRefs as source,index (source.id)}
-<button id={'source-tab-'+source.id} role="tab" aria-selected={sourceId===source.id} aria-controls={'source-panel-'+source.id} tabindex={sourceId===source.id?0:-1} class:active={sourceId===source.id} title={source.reference} disabled={sourceBusy} on:click={()=>selectSource(source.id)} on:keydown={e=>sourceTabKey(e,index)}>{sourceLabel(source.reference)}</button>
+<button id={'source-tab-'+source.id} role="tab" aria-selected={sourceId===source.id} aria-controls={'source-panel-'+source.id} tabindex={sourceId===source.id?0:-1} class:active={sourceId===source.id} title={source.reference} disabled={sourceBusy} on:click={()=>selectSource(source.id)} on:keydown={e=>sourceTabKey(e,index)}>{#if sourceId===source.id&&sourceLoading}<span class="source-spinner" aria-hidden="true"></span>{/if}{sourceLabel(source.reference)}</button>
 {/each}
 </div>
-<button class="add-source" aria-label="Add dataset reference" title="Add dataset reference" on:click={showSourceDialog}>+</button>
+<button class="add-source" aria-label="Add dataset reference" title="Add dataset reference" disabled={sourceListLoading} on:click={showSourceDialog}>+</button>
 </div>
-<div class="dataset-explorer">
-{#if activeSource}
+<div class="dataset-explorer" aria-busy={sourceListLoading||sourceLoading}>
+{#if sourceListLoading}
+<div id="sources-loading-panel" role="status"><span class="source-spinner" aria-hidden="true"></span> Loading datasets…</div>
+{:else if activeSource}
 <div id={'source-panel-'+activeSource.id} role="tabpanel" aria-labelledby={'source-tab-'+activeSource.id} tabindex="0">
 <div class="dataset-reference"><strong>{activeSource.reference}</strong><small>{activeSource.count} records</small><button disabled={sourceBusy} on:click={()=>removeSource(activeSource.id)}>Remove reference</button></div>
 {#if activeSource.error}<p role="alert">{activeSource.error}</p>{/if}
 <form class="source-search" on:submit|preventDefault={()=>browseSource()}><input aria-label="Search source records" placeholder="Search records…" bind:value={sourceSearch}><button>Search</button></form>
 {#if sourceError}<p role="alert">{sourceError}</p>{/if}
-{#if sourceLoading}<p role="status">Loading records…</p>
+{#if sourceLoading}<p role="status"><span class="source-spinner" aria-hidden="true"></span> Loading records…</p>
 {:else if !sourceError}
 <div class="records">{#each sourceRecords as record}<button on:click={()=>{design.sample=record.id;tab='Context';inspector='Inspect'}}>{#if record.photo_url}<img src={record.photo_url} alt="">{/if}{record.name}</button>{/each}</div>
 {#if !sourceRecords.length}<p>No matching records.</p>{/if}
@@ -205,7 +215,7 @@
 </div>
 {:else}
 {#if sourceError}<p role="alert">{sourceError}</p>{/if}
-<p>No dataset references. Use + to add a dataset.</p>
+{#if !sourceError}<p>No dataset references. Use + to add a dataset.</p>{/if}
 {/if}
 </div>
 {:else}
