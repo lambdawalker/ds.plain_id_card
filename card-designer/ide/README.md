@@ -16,7 +16,7 @@ The default starter contains static example text and needs no dataset. Use **Ope
 
 The original templates use a dataset-backed rendering context with seeded synthetic text/number generators. The generator supplies layout filler rather than a hidden people dataset. Connect photo and machine-readable-code datasets in **Data sources** to replace the labeled missing-image placeholders with actual records. The original portrait templates retain their native proportions; the preview, procedural backgrounds, saved designs and bulk exporter use each template's width/height. Old designs default to 640 × 400.
 
-Save the template and stylesheet together with their selected sample, seed, dimensions, background and color. Ctrl+S saves. Clone saves current edits and creates an independent copy. To return to an empty selected-person context, open Dataset and choose **Clear selection · static preview**.
+Save the template and stylesheet together with their selected sample, seed, dimensions, background and color. Ctrl+S saves. Clone saves current edits and creates an independent copy. To return to an empty selected-person context, open **Data sources** in the right panel and choose **Clear selection**.
 
 Preview randomness is request-local. The Jinja random filter and the template context generators use a fresh generator for each render; the browser background uses a separate generator initialized with the same unsigned 32-bit seed. To replay a test, hold the template, CSS, sample, assets, seed, background and color constant. Browser version and fonts can affect pixels. Randomize chooses a new seed and keeps the sample. Template errors retain the last successful preview.
 
@@ -26,14 +26,14 @@ Each Template and Stylesheet header has a **Format** button. With focus inside e
 Run formatter regression tests from ide/web with `node --test test/*.test.mjs`.
 
 ## Local datasets
-Point CARD_PHOTO_DATASET at the ds.photo_id folder containing manifest.yaml, or set DS to its parent. Restart the server, open Dataset, and search by filename stem. The IDE joins image, prompt, card and description by stem using the manifest source folders. Templates can use {{ person.image }} for the photo URL and {{ person.card }} for the parsed profile. Context shows the available fields. Missing sidecars are omitted. CARD_PHOTOS also supports loose images.
+Point CARD_PHOTO_DATASET at the ds.photo_id folder containing manifest.yaml, or set DS to its parent. Restart the server, open **Data sources** in the right panel, and search by filename stem. The IDE joins image, prompt, card and description by stem using the manifest source folders. Templates can use {{ person.image }} for the photo URL and {{ person.card }} for the parsed profile. Context shows the available fields. Missing sidecars are omitted. CARD_PHOTOS also supports loose images.
 
 The dataset browser starts empty until real sources are connected. To browse real local face photos, set CARD_PHOTOS to the image directory before launch. For example, in PowerShell:
 
     $env:CARD_PHOTOS = 'D:\datasets\ds.photo_id\body'
     ..\start.bat
 
-The API indexes JPEG, PNG and WebP files recursively at startup. The filename stem is the display name and the relative path determines a stable record ID. Select a record in Dataset; its ID and photo URL appear in Context. Restart the server after adding files. Use **Artwork** to import a separate background. SQLite and imported artwork live under data/; set CARD_DATA to relocate them.
+The API indexes JPEG, PNG and WebP files recursively at startup. The filename stem is the display name and the relative path determines a stable record ID. Select a record in **Data sources**; its ID and photo URL appear in Context. Restart the server after adding files. Open the gear-shaped **Background settings** panel and use **Artwork** to import a separate background. SQLite and imported artwork live under data/; set CARD_DATA to relocate them.
 
 ## Render a batch
 Save a design and read its numeric ID from the status bar. With the server running, open a second terminal in this directory. On Windows:
@@ -98,3 +98,8 @@ For example, `{{ ds.image('lambdaWalker/ds.machine_readable_code', data.id, 'sli
 The Context inspector includes the effective data, colors, source metadata, real records used from each dataset and missing-field diagnostics. HTML and CSS share one request-local random generator, so a seed replays the same result without changing process-global randomness. The generator compatibility covers the APIs used by the seven ports; its synthetic output is not intended to reproduce the upstream library's random bytes.
 
 Rendering references: [original TemplateRenderer](https://github.com/lambdawalker/python_lw_drawing_tools/blob/main/src/lambdawalker/template/server/render/TemplateRenderer.py), [TemplateServer](https://github.com/lambdawalker/python_lw_drawing_tools/blob/main/src/lambdawalker/template/server/TemplateServer.py), and [field generator context](https://github.com/lambdawalker/python_lw_drawing_tools/blob/main/src/lambdawalker/template/fields.py).
+
+## Background settings and navigation
+The gear beside the design name opens a floating **Background settings** panel with the background family, Artwork import, color, seed, Randomize and recipe editor. The panel stays independent of the editors and closes with its close button, Escape or an outside click. Dataset browsing and clearing the selected record live in the right-hand **Data sources** explorer.
+
+Switching saved designs, creating a design or opening a template with unsaved edits shows an integrated **Unsaved changes** dialog with **Keep editing** and **Discard changes**. Naming a new design and confirming deletion also use integrated dialogs. Browser-managed tab-close/reload warnings remain enabled to protect unsaved work; browsers do not permit replacing those warnings with custom HTML.

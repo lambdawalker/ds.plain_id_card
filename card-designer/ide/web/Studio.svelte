@@ -1,20 +1,31 @@
 <script>
- import {onMount} from 'svelte';
+ import {onMount,tick} from 'svelte';
  import {formatOutput} from './format-output.js';
  import Editor from './Editor.svelte';
  import Icon from './Icon.svelte';
  import {api,renderCard,backgroundRecipe} from './render.js';
  import {starter} from './starter.js';
  let design={...starter}, designs=[], id=null, saved='', ready=false, busy=false;
- let preview='',output='',renderedCSS='',context={},error='',notice='',listing=false,samples=[],search='',offset=0;
- let theme=localStorage.getItem('studio-theme')||'system',zoom='fit',width=720,stageHeight=600,tab='HTML',serial=0,querySerial=0;
+ let preview='',output='',renderedCSS='',context={},error='',notice='';
+ let theme=localStorage.getItem('studio-theme')||'system',zoom='fit',width=720,stageHeight=600,tab='HTML',serial=0;
  let media=window.matchMedia("(prefers-color-scheme: dark)"),systemDark=media.matches;
  $: dark=theme==="dark"||(theme==="system"&&systemDark);
- let recipeText='',recipeOpen=false;
- function editRecipe(){recipeText=JSON.stringify(context.recipe,null,2);recipeOpen=true}
+ let recipeText='',recipeOpen=false,recipeError='';
+ let settingsPanel,settingsTrigger,settingsOpen=false,settingsTop=110,settingsLeft=16;
+ function positionSettings(){
+   if(!settingsTrigger)return;
+   const rect=settingsTrigger.getBoundingClientRect();
+   settingsTop=Math.max(12,Math.min(rect.bottom+8,window.innerHeight-120));
+   settingsLeft=Math.max(12,Math.min(rect.left,window.innerWidth-432));
+ }
+ function toggleSettings(){
+   if(settingsPanel.matches(':popover-open'))settingsPanel.hidePopover();
+   else{positionSettings();settingsPanel.showPopover()}
+ }
+ function editRecipe(){recipeText=JSON.stringify(context.recipe,null,2);recipeError='';recipeOpen=true}
  function applyRecipe(){
    try{design={...design,background_recipe:JSON.parse(recipeText)};recipeOpen=false}
-   catch(e){notice=e.message}
+   catch(e){recipeError=e.message}
  }
  let inspector='Inspect',datasetRefs=[],reference='',sourceError='',sourceId=null,sourceRecords=[],sourceSearch='',sourceOffset=0;
  let sourceDialog,addError='',sourceBusy=false,sourceListLoading=true,sourceLoading=false,sourceSerial=0,datasetsBooting=true,sourcePoll,sourcesDisposed=false;
@@ -36,7 +47,6 @@
      if(status.error)sourceError=status.error;
      if(wasLoading&&!datasetsBooting){
        if(ready)schedule({...design});
-       if(listing)list(search,offset);
        if(templateDialog?.open)showTemplates();
      }
    }catch(e){sourceError=e.message;sourceListLoading=false;datasetsBooting=false}
@@ -110,12 +120,32 @@
    const next=key?await api('designs/'+key):{...starter};
    id=key; design=next; saved=JSON.stringify(next); notice='';
  }
- function canLeave(){return !dirty||confirm('Discard unsaved edits?')}
+ let actionDialog,actionResolve=null,actionKind='',actionTitle='',actionMessage='',actionLabel='',actionValue='';
+ function askAction(kind,title,message,label,value=''){
+   if(actionResolve)return Promise.resolve(null);
+   actionKind=kind;actionTitle=title;actionMessage=message;actionLabel=label;actionValue=value;
+   return new Promise(resolve=>{
+     actionResolve=resolve;
+     tick().then(()=>{
+       if(actionResolve!==resolve)return;
+       actionDialog.showModal();
+       if(kind==='name')actionDialog.querySelector('input')?.focus();
+     });
+   });
+ }
+ function finishAction(value=null){
+   const resolve=actionResolve;actionResolve=null;
+   if(actionDialog?.open)actionDialog.close();
+   resolve?.(value);
+ }
+ async function canLeave(){
+   return !dirty||await askAction('discard','Unsaved changes','Your design has unsaved changes. Discard them and continue?','Discard changes')===true;
+ }
  async function act(fn){if(busy)return;busy=true;try{await fn()}catch(e){notice=e.message}finally{busy=false}}
  onMount(()=>{
    const onTheme=e=>systemDark=e.matches;media.addEventListener("change",onTheme);
    act(async()=>{assets=await api("artwork");await refresh();await open(designs[0]?.id);ready=true});
-   return ()=>{media.removeEventListener("change",onTheme);serial++;querySerial++};
+   return ()=>{media.removeEventListener("change",onTheme);serial++};
  });
  async function save(){
    const original=JSON.stringify(design);
@@ -150,9 +180,10 @@
  }
  function closeTemplates(){templateSerial++;templateDialog.close()}
  async function selectTemplate(item){
-   if(templateOpening||!canLeave())return;
+   if(templateOpening)return;
    templateOpening=item.id;
    try{
+     if(!await canLeave())return;
      const source=item.source||await api('templates/'+encodeURIComponent(item.id));
      const settings=currentSettings();
      id=null;saved=JSON.stringify(starter);design={...starter,...source,...settings};notice='';
@@ -160,9 +191,17 @@
    }catch(e){templates=templates.map(entry=>entry.id===item.id?{...entry,state:'error',error:e.message}:entry)}
    finally{templateOpening=null}
  }
- async function newDesign(){if(!canLeave())return;const name=prompt('Design name','Untitled card');if(name?.trim()){await open(null);design={...starter,name:name.trim()}}}
+ async function newDesign(){
+   if(!await canLeave())return;
+   const name=await askAction('name','New design','Choose a name for your new card.','Create design','Untitled card');
+   if(name){await open(null);design={...starter,name}}
+ }
  async function clone(){if(dirty||!id) await save();const copy=await api('designs/'+id+'/clone','POST');await refresh();await open(copy.id)}
- async function remove(){if(confirm('Delete '+design.name+'?')){await api('designs/'+id,'DELETE');await refresh();await open(designs[0]?.id)}}
+ async function remove(){
+   if(await askAction('delete','Delete design','Delete “'+design.name+'”? This also discards any unsaved edits.','Delete design')){
+     await api('designs/'+id,'DELETE');await refresh();await open(designs[0]?.id);
+   }
+ }
  function schedule(d){
    const current=++serial;
    setTimeout(async()=>{if(current!==serial)return;
@@ -174,13 +213,11 @@
    },140)
  }
  $: if(ready)schedule({...design});
- async function list(q,start){
-   const current=++querySerial;
-   try{const items=await api('samples?q='+encodeURIComponent(q)+'&offset='+start);if(current===querySerial)samples=items}
-   catch(e){if(current===querySerial)notice=e.message}
+ function key(e){
+   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){
+     e.preventDefault();if(!actionDialog?.open)act(save);
+   }
  }
- $: if(listing)list(search,offset);
- function key(e){if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();act(save)}if(e.key==='Escape')listing=false}
  function resizeSource(e){
    const handle=e.currentTarget;
    const bounds=sourceEditors.getBoundingClientRect();
@@ -201,9 +238,9 @@
    handle.onpointerup=()=>{handle.onpointermove=null};
  }
 </script>
-<svelte:window on:keydown={key} on:beforeunload={e=>{if(ready&&dirty){e.preventDefault();e.returnValue=''}}}/>
+<svelte:window on:resize={positionSettings} on:keydown={key} on:beforeunload={e=>{if(ready&&dirty){e.preventDefault();e.returnValue=''}}}/>
 <header class="top"><strong><i>▧</i> Card Designer</strong><span class="tag">STUDIO</span>
-<select aria-label="Open design" value={id??''} disabled={busy} on:change={e=>{let k=Number(e.target.value);e.target.value=id??'';if(canLeave())act(()=>open(k))}}>
+<select aria-label="Open design" value={id??''} disabled={busy||!!templateOpening} on:change={e=>{let k=Number(e.target.value);e.target.value=id??'';act(async()=>{if(await canLeave())await open(k)})}}>
 {#if !id}<option value="">Current draft</option>{/if}{#each designs as d}<option value={d.id}>{d.name}</option>{/each}</select>
 <button class="icon-button" title="New design" aria-label="New design" disabled={busy} on:click={()=>act(newDesign)}><Icon name="new"/></button>
 <button class="icon-button open-templates" title="Open templates" aria-label="Open templates" disabled={busy} on:click={showTemplates}><Icon name="open"/></button>
@@ -212,23 +249,21 @@
 <button class="icon-button" title="Delete design" aria-label="Delete design" disabled={busy||!id} on:click={()=>act(remove)}><Icon name="delete"/></button>
 <span class="grow"></span><label>Theme <select bind:value={theme}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label></header>
 <div class="toolbar"><label>Design <input bind:value={design.name} maxlength="160"></label>
-<label>Background <select bind:value={design.background}><option value="type-b">Type B · Original recipe</option><option value="type-b-v1">Type B · Gradients, grids, lines</option><option value="type-c-v1">Type C · With header</option><option value="type-d-v1">Type D · With country</option><option value="type-a-v1">Type A · Country and header</option><option value="plain">Solid</option>{#each assets as a}<option value={a.id}>{a.name}</option>{/each}</select></label>
-<label class="import">＋ Artwork<input type="file" accept="image/png,image/jpeg,image/webp" on:change={e=>act(()=>upload(e))}></label>
-<input aria-label="Background color" type="color" bind:value={design.color}>
-<label>Seed <input class="seed" type="number" min="0" max="4294967295" bind:value={design.seed}></label>
-<button on:click={()=>design.seed=crypto.getRandomValues(new Uint32Array(1))[0]}>⟳ Randomize</button>
+<button class="icon-button" bind:this={settingsTrigger} title="Background settings" aria-label="Background settings" aria-haspopup="dialog" aria-controls="background-settings" aria-expanded={settingsOpen} on:click={toggleSettings}><Icon name="settings"/></button>
+</div>
+<div id="background-settings" class="background-settings" popover="auto" role="dialog" aria-labelledby="background-settings-title" bind:this={settingsPanel} on:toggle={e=>settingsOpen=e.newState==='open'} style={'top:'+settingsTop+'px;left:'+settingsLeft+'px;max-height:calc(100dvh - '+(settingsTop+12)+'px)'}>
+<div class="settings-heading"><h2 id="background-settings-title">Background settings</h2><button class="icon-button" title="Close background settings" aria-label="Close background settings" on:click={()=>settingsPanel.hidePopover()}><Icon name="close"/></button></div>
+<div class="settings-controls">
+<label for="background-family">Background</label><select id="background-family" bind:value={design.background}><option value="type-b">Type B · Original recipe</option><option value="type-b-v1">Type B · Gradients, grids, lines</option><option value="type-c-v1">Type C · With header</option><option value="type-d-v1">Type D · With country</option><option value="type-a-v1">Type A · Country and header</option><option value="plain">Solid</option>{#each assets as a}<option value={a.id}>{a.name}</option>{/each}</select>
+<label class="import">＋ Artwork<input aria-label="Import artwork" type="file" accept="image/png,image/jpeg,image/webp" on:change={e=>act(()=>upload(e))}></label>
+<label for="background-color">Color</label><input id="background-color" aria-label="Background color" type="color" bind:value={design.color}>
+<label for="background-seed">Seed</label><div class="seed-controls"><input id="background-seed" type="number" min="0" max="4294967295" bind:value={design.seed}><button on:click={()=>design.seed=crypto.getRandomValues(new Uint32Array(1))[0]}>⟳ Randomize</button></div>
 <button disabled={!context.recipe} on:click={editRecipe}>Background parameters</button>
-{#if recipeOpen}<aside class="recipe-panel"><div class="bar">Background recipe <button on:click={()=>recipeOpen=false}>Close</button></div>
-<p>Change layer components and parameters. Seed, family and color must match the active background.</p>
+{#if recipeOpen}<div class="settings-recipe"><h3>Background recipe</h3><p>Seed, family and color must match the active background.</p>
 <textarea aria-label="Background recipe" bind:value={recipeText} spellcheck="false"></textarea>
-<button on:click={applyRecipe}>Apply</button><button on:click={()=>{design={...design,background_recipe:null};recipeOpen=false}}>Reset parameters</button></aside>{/if}
-<button aria-expanded={listing} on:click={()=>listing=!listing}>▦ Dataset · {context.sample?.name??'Browse'}</button>
-{#if listing}<aside class="picker"><div class="bar">Local dataset <button on:click={()=>listing=false}>Close</button></div>
-<button disabled={!design.sample} on:click={()=>{design.sample='';listing=false}}>Clear selection · static preview</button>
-<input aria-label="Search dataset" placeholder="Search records…" bind:value={search} on:input={()=>offset=0}>
-<div class="records">{#each samples as p}<button on:click={()=>{design.sample=p.id;listing=false}}>{#if p.photo_url}<img src={p.photo_url} alt="">{:else}<b>{p.name[0]}</b>{/if}{p.name}</button>{/each}</div>
-{#if datasetsBooting}<p role="status"><span class="source-spinner" aria-hidden="true"></span> Loading datasets…</p>{:else if !samples.length}<p>No matching records.</p>{/if}
-<button disabled={!offset} on:click={()=>offset-=24}>Previous</button><button disabled={samples.length<24} on:click={()=>offset+=24}>Next</button></aside>{/if}</div>
+{#if recipeError}<p role="alert">{recipeError}</p>{/if}
+<div class="settings-recipe-actions"><button on:click={applyRecipe}>Apply</button><button on:click={()=>{design={...design,background_recipe:null};recipeOpen=false}}>Reset parameters</button><button on:click={()=>recipeOpen=false}>Cancel</button></div></div>{/if}
+</div></div>
 <main style={'--left:'+left+'%;--right:'+right+'%'}>
 <section class="sources"><div class="bar">01 / SOURCE <small>EDITABLE</small></div>
 <div class="source-editors" style={'--template-height:'+templateHeight+'%'} bind:this={sourceEditors}>
@@ -256,6 +291,7 @@
 <button class="add-source" aria-label="Add dataset reference" title="Add dataset reference" disabled={sourceListLoading||datasetsBooting} on:click={showSourceDialog}>+</button>
 </div>
 <div class="dataset-explorer" aria-busy={sourceListLoading||sourceLoading}>
+<div class="dataset-selection"><small>Selected: {context.sample?.name||'None'}</small><button disabled={!design.sample} on:click={()=>design.sample=''}>Clear selection</button></div>
 {#if sourceListLoading}
 <div id="sources-loading-panel" role="status"><span class="source-spinner" aria-hidden="true"></span> Loading datasets…</div>
 {:else if activeSource}
@@ -315,3 +351,10 @@
 {/each}
 </div>{/if}
 </dialog>
+
+<dialog class="action-dialog" bind:this={actionDialog} aria-labelledby="action-title" aria-describedby="action-message" on:cancel={e=>{e.preventDefault();finishAction()}}>
+<form on:submit|preventDefault={()=>finishAction(actionKind==='name'?actionValue.trim():true)}>
+<h2 id="action-title">{actionTitle}</h2><p id="action-message">{actionMessage}</p>
+{#if actionKind==='name'}<label for="new-design-name">Design name</label><input id="new-design-name" bind:value={actionValue} required maxlength="160">{/if}
+<div class="dialog-actions"><button type="button" on:click={()=>finishAction()}>{actionKind==='discard'?'Keep editing':'Cancel'}</button><button class:danger={actionKind!=='name'} class:primary={actionKind==='name'} disabled={actionKind==='name'&&!actionValue.trim()}>{actionLabel}</button></div>
+</form></dialog>
