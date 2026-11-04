@@ -37,6 +37,49 @@ class DatasetSourcesTest(unittest.TestCase):
         root = self.dataset()
         self.assertEqual(photo_index(root)["001"]["image"], root / "img/001.png")
 
+    def test_multiple_raw_images_are_indexed_and_exposed_as_distinct_urls(self):
+        fields = [{"name":"image","type":"rawImage","source":"img"},
+                  {"name":"slim_barcode","type":"rawImage","source":"barcodes"}]
+        root = self.dataset(fields=fields)
+        (root / "barcodes").mkdir()
+        barcode = root / "barcodes/001.JPG"
+        barcode.write_bytes(b"barcode jpg")
+        (root / "barcodes/ignore.txt").write_text("not an image")
+        sources = service.add_dataset(service.DatasetReference(reference=str(root)))
+        record = service.samples(offset=0, source_id=sources[0]["id"])[0]
+        self.assertNotEqual(record["image"], record["slim_barcode"])
+        self.assertEqual(record["images"]["slim_barcode"], record["slim_barcode"])
+        self.assertEqual(service.photo(record["slim_barcode"].split("/")[-1]).path, barcode)
+        self.assertEqual(sources[0]["count"], 1)
+        design = service.Design(name="test", template='<img src="{{ person.slim_barcode }}">',
+                                css="", seed=1, color="#ffffff", background="plain", sample=record["id"])
+        self.assertIn(record["slim_barcode"], service.preview(service.Preview(design=design))["template"])
+
+    def test_dataset_can_use_named_images_without_an_image_field(self):
+        root = self.dataset(fields=[{"name":"slim_barcode","type":"rawImage","source":"img"}])
+        sources = service.add_dataset(service.DatasetReference(reference=str(root)))
+        record = service.samples(offset=0, source_id=sources[0]["id"])[0]
+        self.assertEqual(record["image"], record["slim_barcode"])
+        self.assertEqual(record["photo_url"], record["slim_barcode"])
+
+    def test_records_with_only_a_secondary_image_are_browsable(self):
+        root = self.dataset(fields=[{"name":"image","type":"rawImage","source":"img"},
+                                    {"name":"slim_barcode","type":"rawImage","source":"barcodes"}])
+        (root / "barcodes").mkdir()
+        (root / "barcodes/002.jpg").write_bytes(b"barcode jpg")
+        sources = service.add_dataset(service.DatasetReference(reference=str(root)))
+        records = service.samples(offset=0, source_id=sources[0]["id"])
+        self.assertEqual([record["record_id"] for record in records], ["001", "002"])
+        self.assertNotIn("slim_barcode", records[0])
+        self.assertEqual(records[1]["image"], records[1]["slim_barcode"])
+
+    def test_missing_primary_folder_uses_available_secondary_images(self):
+        root = self.dataset(fields=[{"name":"image","type":"rawImage","source":"missing"},
+                                    {"name":"slim_barcode","type":"rawImage","source":"img"}])
+        sources = service.add_dataset(service.DatasetReference(reference=str(root)))
+        record = service.samples(offset=0, source_id=sources[0]["id"])[0]
+        self.assertEqual(record["image"], record["slim_barcode"])
+
     def test_record_order_is_sorted_for_stable_pagination(self):
         root = self.dataset()
         for stem in ("zzz", "aaa"):

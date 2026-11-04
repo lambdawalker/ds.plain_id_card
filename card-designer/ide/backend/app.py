@@ -178,10 +178,20 @@ def rebuild_sources():
                 key = record_key(stem)
                 if key in next_fields:
                     raise ValueError("Record IDs overlap another connected dataset")
-                url = "/api/photos/" + key
-                next_records[key] = {"id": key, "record_id": stem, "name": stem,
-                    "dataset": entries.dataset_id, "source_id": row[0], "image": url, "photo_url": url}
-                next_photos[key], next_fields[key] = fields["image"], fields
+                image_names = [name for name, kind in entries.field_types.items() if kind == "rawImage" and name in fields]
+                primary = "image" if "image" in image_names else image_names[0]
+                image_urls = {}
+                for name in image_names:
+                    image_key = key if name == primary else "photo-" + sha256((key + "\0" + name).encode()).hexdigest()
+                    image_urls[name] = "/api/photos/" + image_key
+                    next_photos[image_key] = fields[name]
+                url = image_urls[primary]
+                # Keep identity/thumbnail fields stable even when a dataset uses those names.
+                reserved = {"id", "record_id", "name", "dataset", "source_id", "photo_url", "images"}
+                next_records[key] = {**{name: value for name, value in image_urls.items() if name not in reserved},
+                    "id": key, "record_id": stem, "name": stem, "dataset": entries.dataset_id,
+                    "source_id": row[0], "image": url, "photo_url": url, "images": image_urls}
+                next_fields[key] = fields
                 next_types[key] = entries.field_types
             info["count"] = len(entries)
         except (OSError, ValueError, KeyError, TypeError) as exc:
