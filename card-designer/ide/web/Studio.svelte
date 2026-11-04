@@ -9,6 +9,21 @@
  let theme=localStorage.getItem('studio-theme')||'system',zoom='fit',width=720,tab='HTML',serial=0,querySerial=0;
  let media=window.matchMedia("(prefers-color-scheme: dark)"),systemDark=media.matches;
  $: dark=theme==="dark"||(theme==="system"&&systemDark);
+ let inspector='Inspect',datasetRefs=[],reference='',sourceError='',sourceId='',sourceRecords=[],sourceSearch='',sourceOffset=0;
+ async function loadSources(){datasetRefs=await api('datasets')}
+ async function browseSource(start=0){
+   sourceOffset=start;
+   sourceRecords=await api('samples?offset='+sourceOffset+'&q='+encodeURIComponent(sourceSearch)+(sourceId?'&source_id='+sourceId:''));
+ }
+ async function addSource(){
+   try{datasetRefs=await api('datasets','POST',{reference});reference='';sourceError='';await browseSource()}
+   catch(e){sourceError=e.message}
+ }
+ async function removeSource(key){
+   try{datasetRefs=await api('datasets/'+key,'DELETE');sourceId='';await browseSource()}
+   catch(e){sourceError=e.message}
+ }
+ onMount(()=>{loadSources().catch(e=>sourceError=e.message)});
  let left=25,right=24,assets=[];
  async function upload(e){
    const file=e.target.files[0];if(!file)return;
@@ -94,10 +109,27 @@
 <div class="stage" bind:clientWidth={width}><div class="art"><div class="ruler" aria-hidden="true" style={"background-size:"+scale*32+"px 100%"}></div><small>SPECIMEN　 /　640 × 400</small><div style={'width:'+640*scale+'px;height:'+400*scale+'px'}><iframe title="Card preview" sandbox="" srcdoc={preview} style={'transform:scale('+scale+')'}></iframe></div></div></div>
 {#if error}<div role="alert">{error}</div>{/if}</section>
 <button class="grip" aria-label="Resize inspector" on:pointerdown={e=>resize(e,'right')} on:keydown={e=>{if(e.key==='ArrowLeft')right=Math.min(38,right+1);if(e.key==='ArrowRight')right=Math.max(15,right-1)}}></button>
-<section class="inspect"><div class="bar">03 / INSPECT <small>READ ONLY</small></div><nav>{#each ['HTML','CSS','Context'] as t}<button class:active={tab===t} on:click={()=>tab=t}>{t}</button>{/each}</nav>
+<section class="inspect"><div class="bar">03 / EXPLORE</div>
+<nav aria-label="Right panel">{#each ['Inspect','Data sources'] as panel}<button class:active={inspector===panel} on:click={()=>{inspector=panel;if(panel==='Data sources')browseSource().catch(e=>sourceError=e.message)}}>{panel}</button>{/each}</nav>
+{#if inspector==='Data sources'}
+<div class="dataset-explorer">
+<form on:submit|preventDefault={addSource}><label>Dataset reference<input aria-label="Dataset reference" placeholder="@DS/ds.photo_id" bind:value={reference} required></label><button>Add dataset</button></form>
+{#if sourceError}<p role="alert">{sourceError}</p>{/if}
+{#each datasetRefs as source}
+<div class="dataset-reference"><strong>{source.reference}</strong><small>{source.count} records</small><button on:click={()=>removeSource(source.id)}>Remove reference</button>{#if source.error}<p role="alert">{source.error}</p>{/if}</div>
+{/each}
+<label>Browse source<select bind:value={sourceId} on:change={()=>browseSource().catch(e=>sourceError=e.message)}><option value="">All sources</option>{#each datasetRefs as source}<option value={source.id}>{source.reference}</option>{/each}</select></label>
+<form on:submit|preventDefault={()=>browseSource().catch(e=>sourceError=e.message)}><input aria-label="Search source records" placeholder="Search records…" bind:value={sourceSearch}><button>Search</button></form>
+<div class="records">{#each sourceRecords as record}<button on:click={()=>{design.sample=record.id;tab='Context';inspector='Inspect'}}>{#if record.photo_url}<img src={record.photo_url} alt="">{/if}{record.name}</button>{/each}</div>
+{#if !sourceRecords.length}<p>No matching records.</p>{/if}
+<button disabled={!sourceOffset} on:click={()=>browseSource(sourceOffset-24).catch(e=>sourceError=e.message)}>Previous</button>
+<button disabled={sourceRecords.length<24} on:click={()=>browseSource(sourceOffset+24).catch(e=>sourceError=e.message)}>Next</button>
+</div>
+{:else}
+<nav>{#each ['HTML','CSS','Context'] as t}<button class:active={tab===t} on:click={()=>tab=t}>{t}</button>{/each}</nav>
 {#key tab}
   <Editor readOnly {dark} label={`Rendered ${tab}`}
     language={tab==='Context'?'json':tab.toLowerCase()}
     value={tab==='HTML'?output:tab==='CSS'?renderedCSS:JSON.stringify(context,null,2)} />
-{/key}</section></main>
+{/key}{/if}</section></main>
 <footer>{notice|| (dirty?'● Modified':id?'● Saved locally':'New draft')} <span>Design {id??"draft"}　 /　 Seed {design.seed}</span></footer>
