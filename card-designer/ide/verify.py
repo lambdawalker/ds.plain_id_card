@@ -10,7 +10,7 @@ from backend import app as service
 class ReplayTest(unittest.TestCase):
     def setUp(self):
         self.design = service.Design(name="Test", template="{{ range(10000)|random }}",
-                                     css="", seed=42, color="#abcdef", background="type-b", sample="1")
+                                     css="", seed=42, color="#abcdef", background="type-b", sample="")
 
     def test_replay_after_interleaved_seed(self):
         def render(seed):

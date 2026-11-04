@@ -1,0 +1,19 @@
+/* Shared editor foundation for the original id_cards layouts.
+   Their original ../_common_ stylesheets are absent from the repository. */
+html, body { margin: 0; padding: 0; font: 28px/1.25 Arial, sans-serif; color: #193837; }
+* { box-sizing: border-box; }
+.card { position: relative; width: 357mm; height: 213mm; padding: 8mm; overflow: hidden; }
+.card-header { margin-bottom: 4mm; }
+h1, h2, h3, h4, p { margin: 1mm 0; }
+h1 { font-size: 1.6em; } h2 { font-size: 1.25em; } h3 { font-size: 1em; } h4 { font-size: .75em; }
+.title-section { display: flex; justify-content: space-between; gap: 6mm; }
+.card-body { display: flex; gap: 8mm; }
+.photo-section { flex-shrink: 0; }
+.main-photo { display: block; width: 100mm; height: 135mm; object-fit: cover; }
+.small-photo { position: absolute; top: 8mm; width: 35mm; height: 45mm; object-fit: cover; opacity: .65; }
+.data-section { flex: 1; min-width: 0; }
+.data-item { margin-bottom: 3mm; }
+.data-item label { display: block; font-size: .6em; letter-spacing: .06em; }
+.data-group, .key-curp { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4mm; }
+.key-curp > div { min-width: 0; }
+.key-curp span, .key-voter span { font-family: monospace; font-size: .7em; }
