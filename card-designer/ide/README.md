@@ -17,6 +17,8 @@ Edit the starter or choose **Open template A** for a working adaptation of the r
 Preview randomness is request-local. The Jinja random filter and the A-template helpers use a fresh generator for each render; the browser background uses a separate generator initialized with the same unsigned 32-bit seed. To replay a test, hold the template, CSS, sample, assets, seed, background and color constant. Browser version and fonts can affect pixels. Randomize chooses a new seed and keeps the sample. Template errors retain the last successful preview.
 
 ## Local datasets
+Point CARD_PHOTO_DATASET at the ds.photo_id folder containing manifest.yaml, or set DS to its parent. Restart the server, open Dataset, and search by filename stem. The IDE joins image, prompt, card and description by stem using the manifest source folders. Templates can use {{ person.image }} for the photo URL and {{ person.card }} for the parsed profile. Context shows the available fields. Missing sidecars are omitted. CARD_PHOTOS also supports loose images.
+
 Four fictional text records work immediately. To browse real local face photos, set CARD_PHOTOS to the image directory before launch. For example, in PowerShell:
 
     $env:CARD_PHOTOS = 'D:\datasets\ds.photo_id\body'

@@ -1,5 +1,6 @@
 <script>
  import {onMount} from 'svelte';
+ import {formatOutput} from './format-output.js';
  import Editor from './Editor.svelte';
  import {api,renderCard} from './render.js';
  import {starter} from './starter.js';
@@ -45,6 +46,8 @@
    setTimeout(async()=>{if(current!==serial)return;
      try{const result=await renderCard(d);if(current!==serial)return;
        preview=result.html;output=result.template;renderedCSS=result.css;context={seed:d.seed,sample:result.person,background:d.background};error='';
+       const formatted=await Promise.all([formatOutput(result.template,'html'),formatOutput(result.css,'css')]);
+       if(current===serial)[output,renderedCSS]=formatted;
      }catch(e){if(current===serial)error=e.message}
    },140)
  }
