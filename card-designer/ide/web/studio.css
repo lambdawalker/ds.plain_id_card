@@ -30,3 +30,7 @@
 .dataset-tabs button:disabled[aria-selected=true]{opacity:1}
 @keyframes source-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.source-spinner{animation:none}}
+
+.editor-actions{display:flex;align-items:center;gap:8px;min-width:0}.editor-actions button{font-size:12px;padding:3px 7px}.format-error{flex-shrink:0;margin:0;padding:8px 12px;max-height:100px;overflow:auto;overflow-wrap:anywhere;font-size:12px;color:var(--ink);border-top:1px solid var(--line)}
+
+.source-pane h3{flex-wrap:wrap;gap:6px}
