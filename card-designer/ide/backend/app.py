@@ -10,6 +10,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from jinja2 import StrictUndefined, TemplateError
 from jinja2.sandbox import SandboxedEnvironment
+from .path_resolver import resolve
+from threading import RLock
 from .photo_dataset import metadata, photo_index
 from .legacy import helpers, sample_template
 from pydantic import BaseModel, Field
@@ -115,25 +117,95 @@ records.update({key: {"id": key, "name": file.stem, "photo_url": "/api/photos/" 
 
 
 photo_fields = {}
+base_records = dict(records)
+base_photos = dict(photos)
+source_lock = RLock()
+with closing(database()) as db, db:
+    db.execute("CREATE TABLE IF NOT EXISTS dataset_source(id INTEGER PRIMARY KEY, reference TEXT UNIQUE NOT NULL)")
+
+
+def index_reference(reference):
+    return photo_index(resolve(reference, make=False))
+
+
+def rebuild_sources():
+    global records, photos, photo_fields
+    next_records, next_photos, next_fields = dict(base_records), dict(base_photos), {}
+    sources = []
+    with closing(database()) as db:
+        rows = db.execute("SELECT id, reference FROM dataset_source ORDER BY id").fetchall()
+    for row in rows:
+        info = {"id": row[0], "reference": row[1], "count": 0, "error": ""}
+        try:
+            entries = index_reference(row[1])
+            if any("photo-" + sha256(stem.encode()).hexdigest() in next_fields for stem in entries):
+                raise ValueError("Record IDs overlap another connected dataset")
+            for stem, fields in entries.items():
+                # Preserve saved sample IDs for the original photo dataset.
+                key = "photo-" + sha256(stem.encode()).hexdigest()
+                if key in next_fields:
+                    raise ValueError("Record IDs overlap another connected dataset")
+                url = "/api/photos/" + key
+                next_records[key] = {"id": key, "record_id": stem, "name": stem,
+                    "dataset": "lambdaWalker/ds.photo_id", "source_id": row[0], "image": url, "photo_url": url}
+                next_photos[key], next_fields[key] = fields["image"], fields
+            info["count"] = len(entries)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            info["error"] = str(exc)
+        sources.append(info)
+    records, photos, photo_fields = next_records, next_photos, next_fields
+    return sources
+
+
+class DatasetReference(BaseModel):
+    reference: str = Field(min_length=1, max_length=2048)
+
+
+@app.get("/api/datasets")
+def datasets():
+    with source_lock:
+        return rebuild_sources()
+
+
+@app.post("/api/datasets")
+def add_dataset(payload: DatasetReference):
+    reference = payload.reference.strip()
+    with source_lock:
+        try:
+            index_reference(reference)
+            with closing(database()) as db, db:
+                db.execute("INSERT OR IGNORE INTO dataset_source(reference) VALUES (?)", (reference,))
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return rebuild_sources()
+
+
+@app.delete("/api/datasets/{key}")
+def remove_dataset(key: int):
+    with source_lock:
+        with closing(database()) as db, db:
+            db.execute("DELETE FROM dataset_source WHERE id=?", (key,))
+        return rebuild_sources()
+
+
 source = os.getenv("CARD_PHOTO_DATASET")
 if not source and os.getenv("DS"):
     candidate = Path(os.environ["DS"]) / "ds.photo_id"
     if (candidate / "manifest.yaml").is_file():
-        source = candidate
-if source:
-    for stem, fields in photo_index(Path(source)).items():
-        key = "photo-" + sha256(stem.encode()).hexdigest()
-        url = "/api/photos/" + key
-        records[key] = {"id": key, "record_id": stem, "name": stem,
-                        "dataset": "lambdaWalker/ds.photo_id", "image": url, "photo_url": url}
-        photos[key] = fields["image"]
-        photo_fields[key] = fields
+        source = str(candidate)
+with closing(database()) as db, db:
+    db.execute("CREATE TABLE IF NOT EXISTS source_migration(id INTEGER PRIMARY KEY)")
+    if not db.execute("SELECT 1 FROM source_migration").fetchone():
+        if source:
+            db.execute("INSERT OR IGNORE INTO dataset_source(reference) VALUES (?)", (source,))
+        db.execute("INSERT INTO source_migration VALUES (1)")
+rebuild_sources()
 
 
 @app.get("/api/samples")
-def samples(q: str = "", offset: int = Query(default=0, ge=0)):
+def samples(q: str = "", offset: int = Query(default=0, ge=0), source_id: int | None = None):
     from itertools import islice
-    matches = (r for r in records.values() if q.casefold() in (r["name"] + r["id"]).casefold())
+    matches = (r for r in list(records.values()) if (source_id is None or r.get("source_id") == source_id) and q.casefold() in (r["name"] + r["id"]).casefold())
     return list(islice(matches, offset, offset + 24))
 
 
