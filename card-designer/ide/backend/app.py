@@ -1,4 +1,5 @@
 import os
+import logging
 from hashlib import sha256
 import random
 import sqlite3
@@ -6,6 +7,9 @@ from contextlib import closing
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from jinja2 import StrictUndefined, TemplateError
@@ -21,6 +25,20 @@ DATA = Path(os.getenv("CARD_DATA", ROOT / "data"))
 DATA.mkdir(parents=True, exist_ok=True)
 DB = DATA / "designs.sqlite"
 app = FastAPI()
+logger = logging.getLogger("uvicorn.error")
+
+
+@app.exception_handler(StarletteHTTPException)
+async def log_http_error(request: Request, exc: StarletteHTTPException):
+    logger.warning("%s %s -> %s: %s", request.method, request.url.path, exc.status_code, exc.detail)
+    return await http_exception_handler(request, exc)
+
+
+@app.exception_handler(RequestValidationError)
+async def log_validation_error(request: Request, exc: RequestValidationError):
+    details = [{"loc": error["loc"], "msg": error["msg"], "type": error["type"]} for error in exc.errors()]
+    logger.warning("%s %s -> 422: request validation failed: %s", request.method, request.url.path, details)
+    return await request_validation_exception_handler(request, exc)
 
 
 class Design(BaseModel):
@@ -118,6 +136,7 @@ records.update({key: {"id": key, "name": file.stem, "photo_url": "/api/photos/" 
 
 
 photo_fields = {}
+photo_field_types = {}
 base_records = dict(records)
 base_photos = dict(photos)
 source_lock = RLock()
@@ -126,35 +145,49 @@ with closing(database()) as db, db:
 
 
 def index_reference(reference):
-    return photo_index(resolve(reference, make=False))
+    resolved = None
+    try:
+        resolved = resolve(reference, make=False)
+        return photo_index(resolved)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        logger.exception("Dataset indexing failed: reference=%r resolved=%s error=%s: %s",
+                         reference, resolved, type(exc).__name__, exc)
+        raise
 
 
 def rebuild_sources():
-    global records, photos, photo_fields
+    global records, photos, photo_fields, photo_field_types
     next_records, next_photos, next_fields = dict(base_records), dict(base_photos), {}
     sources = []
+    next_types = {}
     with closing(database()) as db:
         rows = db.execute("SELECT id, reference FROM dataset_source ORDER BY id").fetchall()
     for row in rows:
         info = {"id": row[0], "reference": row[1], "count": 0, "error": ""}
         try:
             entries = index_reference(row[1])
-            if any("photo-" + sha256(stem.encode()).hexdigest() in next_fields for stem in entries):
+            info["dataset"] = entries.dataset_id
+            def record_key(stem):
+                # Keep existing photo selections stable; namespace other dataset IDs.
+                identity = stem if entries.dataset_id.casefold() == "lambdawalker/ds.photo_id" else entries.dataset_id + "\0" + stem
+                return "photo-" + sha256(identity.encode()).hexdigest()
+            if any(record_key(stem) in next_fields for stem in entries):
                 raise ValueError("Record IDs overlap another connected dataset")
             for stem, fields in entries.items():
                 # Preserve saved sample IDs for the original photo dataset.
-                key = "photo-" + sha256(stem.encode()).hexdigest()
+                key = record_key(stem)
                 if key in next_fields:
                     raise ValueError("Record IDs overlap another connected dataset")
                 url = "/api/photos/" + key
                 next_records[key] = {"id": key, "record_id": stem, "name": stem,
-                    "dataset": "lambdaWalker/ds.photo_id", "source_id": row[0], "image": url, "photo_url": url}
+                    "dataset": entries.dataset_id, "source_id": row[0], "image": url, "photo_url": url}
                 next_photos[key], next_fields[key] = fields["image"], fields
+                next_types[key] = entries.field_types
             info["count"] = len(entries)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             info["error"] = str(exc)
         sources.append(info)
-    records, photos, photo_fields = next_records, next_photos, next_fields
+    records, photos, photo_fields, photo_field_types = next_records, next_photos, next_fields, next_types
     return sources
 
 
@@ -268,9 +301,11 @@ def preview(request: Preview):
         raise HTTPException(422, "Sample unavailable. Choose another record.")
     if d.sample in photo_fields:
         try:
-            person = {**person, **metadata(photo_fields[d.sample])}
+            person = {**person, **metadata(photo_fields[d.sample], photo_field_types[d.sample])}
         except (OSError, ValueError) as exc:
-            raise HTTPException(422, f"Invalid metadata for photo record {person['record_id']}") from exc
+            logger.exception("Dataset metadata failed: dataset=%r record=%r error=%s: %s",
+                             person["dataset"], person["record_id"], type(exc).__name__, exc)
+            raise HTTPException(422, f"Invalid metadata for dataset {person['dataset']}, record {person['record_id']}: {exc}") from exc
     rng = random.Random(d.seed)
     env = SandboxedEnvironment(undefined=StrictUndefined, autoescape=True)
     env.filters["random"] = rng.choice
