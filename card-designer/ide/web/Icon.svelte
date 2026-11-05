@@ -1,6 +1,8 @@
 <script>
  export let name;
  const paths={
+  download:'M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5',
+  archive:'M3 3h18v5H3zM5 8v13h14V8M10 12h4M12 12v5m-2-2 2 2 2-2',
   new:'M12 5v14M5 12h14',
   open:'M3 8V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v1M3 8h18l-3 12H3z',
   clone:'M9 9h12v12H9zM5 15H3V3h12v2',

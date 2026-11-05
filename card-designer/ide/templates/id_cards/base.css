@@ -1,23 +1,28 @@
-/* Shared editor foundation for the original id_cards layouts.
-   Their original ../_common_ stylesheets are absent from the repository. */
-html, body { margin: 0; padding: 0; font: 28px/1.25 Arial, sans-serif; color: {{ env.theme.text_color.to_rgb_hex() }}; }
+/* Card-scale typography and common aligned field primitives. */
+html, body { margin: 0; padding: 0; font: 28px/1.2 Arial, sans-serif; color: {{ env.theme.text_color.to_rgb_hex() }}; }
 * { box-sizing: border-box; }
-.card { position: relative; width: 357mm; height: 213mm; padding: 8mm; overflow: hidden; }
-.card-header { margin-bottom: 4mm; }
-h1, h2, h3, h4, p { margin: 1mm 0; }
-h1 { font-size: 1.6em; } h2 { font-size: 1.25em; } h3 { font-size: 1em; } h4 { font-size: .75em; }
-.title-section { display: flex; justify-content: space-between; gap: 6mm; }
-.card-body { display: flex; gap: 8mm; }
-.photo-section { flex-shrink: 0; }
-.main-photo { display: block; width: 100mm; height: 135mm; object-fit: cover; }
-.small-photo { position: absolute; top: 8mm; width: 35mm; height: 45mm; object-fit: cover; opacity: .65; }
-.data-section { flex: 1; min-width: 0; }
-.data-item { margin-bottom: 3mm; }
-.data-item label { display: block; font-size: .6em; letter-spacing: .06em; }
-.data-group, .key-curp { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4mm; }
-.key-curp > div { min-width: 0; }
-.key-curp span, .key-voter span { font-family: monospace; font-size: .7em; }
+.card { position: relative; width: 100%; height: 100%; padding: {{ variation.margin }}px; overflow: hidden; font-size: {{ variation.font_size }}px; display: flex; flex-direction: column; gap: {{ variation.header_gap }}px; }
+h1, h2, h3, h4, p { margin: 0; }
+.card-header { flex-shrink: 0; margin: 0; padding-bottom: 14px; border-bottom: 2px solid currentColor; }
+.title-section { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); align-items: start; gap: 28px; }
+.title-section h1 { font-size: {{ 1 if (common.get('card_title') or identity.document_type or '')|length > 26 else 1.3 }}em; line-height: 1.1; }
+.title-section h2 { font-size: {{ 0.85 if (common.get('issuer') or identity.issuing_authority or '')|length > 42 else 1 }}em; line-height: 1.15; text-align: right; }
+.title-section > *, .data-item, .identity-details, .data-section { min-width: 0; overflow-wrap: anywhere; }
+.photo-section { position: relative; min-height: 0; }
+.main-photo { display: block; object-fit: cover; background: {{ variation.photo_background|default('transparent') }}; }
+.data-item { margin: 0; min-width: 0; }
+.data-item p { margin-top: 4px; line-height: 1.18; }
+.data-item label { display: block; font-size: {{ variation.label_size }}px; letter-spacing: .045em; line-height: 1.15; margin-bottom: 4px; }
+.name p { font-size: {{ 1.05 if identity.full_name|length > 36 else 1.2 }}em; font-weight: 700; }
+.key-voter span { font-size: 1.08em; font-weight: 700; letter-spacing: .025em; }
+.key-curp span { font-size: .95em; }
+.field-grid, .data-group, .key-curp, .dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: {{ variation.field_gap }}px 28px; align-content: start; }
+.full { grid-column: 1 / -1; }
+.physical-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.dates .issued, .bottom-row .state:first-child { order: {{ variation.dates_reversed }}; }
+.dates .expires, .bottom-row .state:last-child { order: {{ 1 - variation.dates_reversed }}; }
+.code-image { display: block; object-fit: contain; max-width: 100%; }
 
-/* Keep secondary portraits within the primary portrait, including mirrored layouts. */
-.photo-section { position: relative; }
-.title-section > *, .data-item, .data-section { min-width: 0; overflow-wrap: anywhere; }
+.address p { font-size: .94em; }
+.card > .dates { flex-shrink: 0; }
+.code-panel { flex-shrink: 0; }

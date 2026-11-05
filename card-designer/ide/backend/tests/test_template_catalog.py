@@ -10,6 +10,8 @@ class TemplateCatalogTest(unittest.TestCase):
         self.assertEqual([item['id'] for item in items], list(TEMPLATE_IDS))
         for item in items:
             self.assertGreater(item['height'], item['width']) if item['kind']=='vertical_card' else self.assertGreater(item['width'], item['height'])
+            self.assertEqual(sorted((item['width'],item['height'])),[850,1350])
+            self.assertEqual(item['variation_version'],2)
             source = service.open_template(item['id'])
             self.assertNotIn('/ds/', source['template'])
             self.assertIn('assets.', source['template'])
@@ -51,4 +53,4 @@ class TemplateCatalogTest(unittest.TestCase):
             design = service.Design(**service.open_template('C'), seed=42, color='#a4d5c8', background='plain')
             key = service.create(design)['id']
             saved = service.read(key)
-            self.assertEqual((saved.width, saved.height, saved.template_id), (740, 1285, 'C-top'))
+            self.assertEqual((saved.width, saved.height, saved.template_id), (850, 1350, 'C-top'))

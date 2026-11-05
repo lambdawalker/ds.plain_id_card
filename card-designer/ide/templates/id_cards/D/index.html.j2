@@ -13,12 +13,6 @@
         data-class="photo"
         alt="Portrait"
       />
-    </div>
-    <div class="identity-details field-grid">
-      <div class="data-item name full">
-        <label>NAME</label>
-        <p>{{ identity.full_name or '—' }}</p>
-      </div>
       <div class="data-item birth">
         <label>DATE OF BIRTH</label>
         <p>{{ identity.birth_date or '—' }}</p>
@@ -26,6 +20,26 @@
       <div class="data-item sex">
         <label>SEX</label>
         <p>{{ identity.sex or '—' }}</p>
+      </div>
+      <div class="physical-grid full">
+        <div class="data-item ">
+          <label>HEIGHT</label>
+          <p>{{ identity.height or '—' }}</p>
+        </div>
+        <div class="data-item ">
+          <label>EYES</label>
+          <p>{{ identity.eye_color or '—' }}</p>
+        </div>
+        <div class="data-item ">
+          <label>BLOOD TYPE</label>
+          <p>{{ identity.blood_type or '—' }}</p>
+        </div>
+      </div>
+    </div>
+    <div class="identity-details field-grid">
+      <div class="data-item name full">
+        <label>NAME</label>
+        <p>{{ identity.full_name or '—' }}</p>
       </div>
       <div class="data-item address full">
         <label>ADDRESS</label>
@@ -41,20 +55,6 @@
       <div class="data-item ">
         <label>NATIONALITY</label>
         <p>{{ identity.nationality or '—' }}</p>
-      </div>
-      <div class="physical-grid full">
-        <div class="data-item ">
-          <label>HEIGHT</label>
-          <p>{{ identity.height or '—' }}</p>
-        </div>
-        <div class="data-item ">
-          <label>EYES</label>
-          <p>{{ identity.eye_color or '—' }}</p>
-        </div>
-        <div class="data-item ">
-          <label>BLOOD TYPE</label>
-          <p>{{ identity.blood_type or '—' }}</p>
-        </div>
       </div>
       <div class="dates full">
         <div class="data-item issued">

@@ -51,7 +51,7 @@ class TemplateBundleTest(unittest.TestCase):
         self.assertEqual(orders,{0,1})
         self.assertEqual(state,random.getstate())
         with self.assertRaises(ValueError):
-            resolve_parameters('A-left',42,2)
+            resolve_parameters('A-left',42,99)
 
     def test_bundle_generation_is_balanced_and_reproducible(self):
         sequence = balanced_variants(['A-left','A-right'],7,42)
@@ -79,3 +79,16 @@ class TemplateBundleTest(unittest.TestCase):
             preview=service.preview(service.Preview(design=saved))
             self.assertEqual(preview['context']['template_selection']['parameters'],saved.template_parameters)
             self.assertNotIn('{{',preview['css'])
+
+    def test_portrait_backplates_are_seeded_and_cover_all_treatments(self):
+        for key in TEMPLATE_IDS:
+            treatments={resolve_parameters(key,seed).get('photo_background') for seed in range(64)}
+            self.assertEqual(treatments, {'transparent','rgba(255,255,255,0.55)','#ffffff'})
+
+    def test_original_variations_remain_available_for_saved_designs(self):
+        parameters=resolve_parameters('A-left',42,1)
+        self.assertEqual(parameters['version'],1)
+        self.assertNotIn('photo_background',parameters)
+        for key,(low,high) in variation_schema('A-left',1).items():
+            self.assertLessEqual(low,parameters[key])
+            self.assertLessEqual(parameters[key],high)

@@ -146,7 +146,7 @@ try {
     await frame
       .locator("#view-port")
       .evaluate((el) => Math.round(el.getBoundingClientRect().width)),
-    740,
+    850,
   );
   // A save in progress must block replacement of the tab set.
   await page
