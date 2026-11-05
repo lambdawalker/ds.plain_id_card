@@ -2,7 +2,11 @@ export interface Size {
   width: number;
   height: number;
 }
-export function surface(width: number, height: number): HTMLCanvasElement {
+const logicalSizes = new WeakMap<HTMLCanvasElement, Size>();
+export function dimensions(ctx: CanvasRenderingContext2D): Size {
+  return logicalSizes.get(ctx.canvas) || ctx.canvas;
+}
+export function surface(width: number, height: number, target?: Size): HTMLCanvasElement {
   if (
     !Number.isInteger(width) ||
     !Number.isInteger(height) ||
@@ -12,14 +16,19 @@ export function surface(width: number, height: number): HTMLCanvasElement {
     height > 4096
   )
     throw new Error("Canvas dimensions must be integers from 1 to 4096");
+  if (target && (!Number.isInteger(target.width) || !Number.isInteger(target.height) || target.width < 1 || target.height < 1 || target.width > 4096 || target.height > 4096))
+    throw new Error("Render dimensions must be integers from 1 to 4096");
   const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = target?.width ?? width;
+  canvas.height = target?.height ?? height;
+  logicalSizes.set(canvas, {width, height});
   return canvas;
 }
 export function context(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas 2D unavailable");
+  const size = dimensions(ctx);
+  ctx.setTransform(canvas.width / size.width, 0, 0, canvas.height / size.height, 0, 0);
   return ctx;
 }
 export function rotated(
@@ -29,9 +38,9 @@ export function rotated(
 ) {
   ctx.save();
   try {
-    ctx.translate(ctx.canvas.width / 2, ctx.canvas.height / 2);
+    ctx.translate(dimensions(ctx).width / 2, dimensions(ctx).height / 2);
     ctx.rotate((angle * Math.PI) / 180);
-    draw(Math.hypot(ctx.canvas.width, ctx.canvas.height));
+    draw(Math.hypot(dimensions(ctx).width, dimensions(ctx).height));
   } finally {
     ctx.restore();
   }

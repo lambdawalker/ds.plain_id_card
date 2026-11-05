@@ -1,14 +1,15 @@
 // Browser port of one Type B recipe: linear gradient, rotated dot grid, parallel sine waves.
-function typeBBackground(width, height, color, seed) {
+function typeBBackground(width, height, color, seed, target = {width, height}) {
   let state = seed >>> 0;
   function random() {
     state = (Math.imul(1664525, state) + 1013904223) >>> 0;
     return state / 4294967296;
   }
   const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = target.width;
+  canvas.height = target.height;
   const ctx = canvas.getContext('2d');
+  ctx.scale(target.width / width, target.height / height);
   const gradient = ctx.createLinearGradient(0, random() * height, width, random() * height);
   gradient.addColorStop(0, '#fff');
   gradient.addColorStop(1, color);

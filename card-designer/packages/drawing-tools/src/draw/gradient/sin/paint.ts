@@ -2,6 +2,7 @@ import type { Parameters } from "./parameters.ts";
 import { rgb } from "../../color/index.ts";
 export function paint(ctx: CanvasRenderingContext2D, p: Parameters): void {
   const { width, height } = ctx.canvas,
+    scaleX = ctx.getTransform().a, scaleY = ctx.getTransform().d,
     a = (p.angle * Math.PI) / 180;
   const start = rgb(p.start_color),
     end = rgb(p.end_color),
@@ -10,7 +11,7 @@ export function paint(ctx: CanvasRenderingContext2D, p: Parameters): void {
     for (let x = 0; x < width; x++) {
       const mix =
           (Math.cos(
-            ((x * Math.cos(a) + y * Math.sin(a)) * 2 * Math.PI) / p.wavelength,
+            (((x / scaleX) * Math.cos(a) + (y / scaleY) * Math.sin(a)) * 2 * Math.PI) / p.wavelength,
           ) +
             1) /
           2,

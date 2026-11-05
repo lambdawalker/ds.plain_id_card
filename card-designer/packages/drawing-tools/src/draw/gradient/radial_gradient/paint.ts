@@ -1,7 +1,8 @@
+import { dimensions } from "../../surface.ts";
 import type { Parameters } from "./parameters.ts";
 
 export function paint(ctx: CanvasRenderingContext2D, p: Parameters): void {
-  const { width, height } = ctx.canvas;
+  const { width, height } = dimensions(ctx);
   const g = ctx.createRadialGradient(
     p.center_x * width,
     p.center_y * height,

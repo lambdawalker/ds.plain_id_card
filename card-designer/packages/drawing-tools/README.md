@@ -29,6 +29,8 @@ const {canvas, recipe} = await create({
   family: 'type-a', seed: 42, color: '#95b5c7', width: 640, height: 400,
 });
 const repeated = await replay(JSON.parse(JSON.stringify(recipe)));
+// Optional backing dimensions: the recipe and all layout coordinates stay 640 × 400.
+const sharp = await replay(recipe, {width: 1280, height: 800});
 ~~~
 
 Each layer has its own random stream derived from its role. Adding a country or header

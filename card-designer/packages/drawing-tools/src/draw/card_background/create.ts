@@ -1,4 +1,5 @@
 import { surface, context } from "../surface.ts";
+import type { Size } from "../surface.ts";
 import { paintLayer, registry } from "../registry.ts";
 import { random } from "../../random/seeded.ts";
 import { parameters, version } from "./parameters.ts";
@@ -74,9 +75,9 @@ function validate(recipe: Recipe) {
     }
   }
 }
-export async function replay(recipe: Recipe) {
+export async function replay(recipe: Recipe, target?: Size) {
   validate(recipe);
-  const canvas = surface(recipe.width, recipe.height),
+  const canvas = surface(recipe.width, recipe.height, target),
     ctx = context(canvas);
   for (const layer of recipe.layers) {
     ctx.save();
@@ -88,6 +89,6 @@ export async function replay(recipe: Recipe) {
   }
   return { canvas, recipe };
 }
-export async function create(options: Options) {
-  return replay(parameters(options));
+export async function create(options: Options, target?: Size) {
+  return replay(parameters(options), target);
 }
