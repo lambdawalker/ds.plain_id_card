@@ -21,7 +21,7 @@ def template_source(key):
     folder = ROOT / variant['folder']
     info = yaml.safe_load((folder / 'meta.yaml').read_text(encoding='utf-8'))
     kind = info.get('class', 'horizontal_card')
-    width, height = (740, 1285) if kind == 'vertical_card' else (1350, 806)
+    width, height = (850, 1350) if kind == 'vertical_card' else (1350, 850)
     template = (folder / 'index.html.j2').read_text(encoding='utf-8')
     css = (ROOT / 'base.css').read_text(encoding='utf-8') + '\n' + (folder / 'style.css.j2').read_text(encoding='utf-8')
     if variant.get('layout'):
@@ -32,7 +32,7 @@ def template_source(key):
     return {'id': key, 'template_id': key, 'bundle_id': bundle['id'], 'bundle_name': bundle['name'],
             'name': variant['name'], 'description': info.get('description', '').strip(), 'kind': kind,
             'layout': variant.get('layout'), 'variation_version': variant.get('variation_version', 1),
-            'variation_schema': variation_schema(key) if variant.get('layout') else {},
+            'variation_schema': variation_schema(key, variant.get('variation_version',1)) if variant.get('layout') else {},
             'width': width, 'height': height, 'required_datasets': required,
             'template': template, 'css': css}
 

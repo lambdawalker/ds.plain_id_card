@@ -177,3 +177,7 @@ The gallery shows exactly one clickable card per bundle: up to three overlapping
 Replacing a bundle checks unsaved work in all tabs, including inactive ones. Cancel keeps the entire tab set; Discard replaces it. Save and template replacement are serialized to prevent late save results from updating a different draft. Saved designs persist individually; the open tab set is session state.
 
 The repeatable `test:bundle-tabs` browser check covers stacked previews, independent tab edits and saved IDs, aggregate unsaved protection, save/open serialization and keyboard navigation. Run it with `CARD_SERVER` against an isolated test server; it creates and removes its own saved designs.
+
+The preview toolbar downloads the active card as a PNG or every open layout as a ZIP of PNGs. Downloads render a snapshot of each tab’s current source and settings at native card dimensions, including unsaved edits, independently of preview zoom. A render failure reports an error without downloading a partial bundle.
+
+All newly opened bundle layouts use 1350 × 850 landscape or 850 × 1350 portrait dimensions. Version 2 variations use stronger card-scale typography, consistent edge margins, full-height content regions, and deterministic transparent, translucent-white or white portrait backplates. Existing saved dimensions, source, and version 1 parameters are retained; reopen a bundle to adopt the updated layouts. Backplates sit behind the image and preserve portrait opacity.

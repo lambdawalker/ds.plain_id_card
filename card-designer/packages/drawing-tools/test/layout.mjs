@@ -17,7 +17,7 @@ try {
   const catalog = await (
     await page.request.get(base + "/api/templates")
   ).json();
-  for (const item of catalog) {
+  for (const item of catalog.filter(item=>!process.env.LAYOUT_PREFIX||item.id.startsWith(process.env.LAYOUT_PREFIX))) {
     const letter = item.id;
     const source = await (
       await page.request.get(base + "/api/templates/" + letter)
@@ -37,7 +37,7 @@ try {
         },
       });
       if (!r.ok()) throw Error(await r.text());
-      const result = await r.json();
+      const result = process.env.LAYOUT_BACKGROUND ? await page.evaluate(async ({source,seed,background})=>window.cardDesignerRender({...source,seed,background,color:'#d3b489',auto_theme:false,sample:''}),{source,seed,background:process.env.LAYOUT_BACKGROUND}) : await r.json();
       await page.locator("#qa").evaluate(
         (el, { source, result, token }) => {
           el.width = source.width;
@@ -54,6 +54,7 @@ try {
             '">' +
             result.template +
             "</div>";
+          if(result.html)el.srcdoc=result.html.replace('id="view-port"','id="view-port" data-case="'+token+'"');
         },
         { source, result, token: letter + "-" + seed },
       );
@@ -69,6 +70,7 @@ try {
           [...document.images].map((img) => img.decode().catch(() => {})),
         );
       });
+      if(process.env.LAYOUT_SCREENSHOTS && seed===0)await frame.locator('#view-port').screenshot({path:process.env.LAYOUT_SCREENSHOTS+'/'+letter+'.png'});
       const audit = await frame.evaluate(() => {
         const root = document.querySelector(".card"),
           bounds = document.querySelector("#view-port").getBoundingClientRect(),
@@ -195,7 +197,16 @@ try {
             };
           }
         }
-        return { outside, overlaps, structure };
+        const portrait=root.querySelector('.main-photo');
+        if(portrait){
+          const style=getComputedStyle(portrait);
+          if(!['rgba(0, 0, 0, 0)','rgba(255, 255, 255, 0.55)','rgb(255, 255, 255)'].includes(style.backgroundColor))throw Error('Unexpected portrait backplate: '+style.backgroundColor);
+          if(style.opacity!=='1')throw Error('Primary portrait must remain opaque');
+        }
+        const contentBottom=Math.max(...rects.filter(r=>!r.decorative).map(r=>r.y+r.h));
+        const bottomGap=bounds.bottom-contentBottom;
+        if(bottomGap>Math.max(80,bounds.height*.07))throw Error('Unused bottom space: '+Math.round(bottomGap)+'px');
+        return { outside, overlaps, structure, bottomGap };
       });
       if (seed === 0) structure = JSON.stringify(audit.structure);
       else if (structure !== JSON.stringify(audit.structure))

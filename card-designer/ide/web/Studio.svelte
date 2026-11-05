@@ -1,5 +1,6 @@
 <script>
  import {onMount,tick} from 'svelte';
+ import {downloadName,renderedPNG,saveBlob,zipFiles} from './download.js';
  import {copyCardImage} from './copy-image.js';
  import {formatOutput} from './format-output.js';
  import Editor from './Editor.svelte';
@@ -12,6 +13,22 @@
  async function copyImage(){if(copying||!preview)return;copying=true;try{await copyCardImage(preview,previewWidth,previewHeight);notice='Card image copied'}catch(e){notice='Could not copy image: '+e.message}finally{copying=false}}
  let preview='',output='',renderedCSS='',context={},error='',notice='';
  let previewTabs=[],activePreviewId='',previewCounter=0;
+ async function downloadCards(bundle=false){
+   if(busy||templateOpening)return;
+   rememberPreview();
+   const snapshots=(bundle?previewTabs:[previewTabs.find(tab=>tab.key===activePreviewId)]).map(tab=>structuredClone(tab.design));
+   await act(async()=>{
+     const files=[];
+     for(let index=0;index<snapshots.length;index++){
+       const item=snapshots[index];notice='Rendering card '+(index+1)+' of '+snapshots.length+'…';
+       const blob=await renderedPNG(item,renderCard);
+       files.push({name:downloadName(item.template_id||item.name)+'-'+(index+1)+'.png',blob});
+     }
+     if(bundle)saveBlob(await zipFiles(files),downloadName(snapshots[0].bundle_name||'Card bundle')+'.zip');
+     else saveBlob(files[0].blob,downloadName(snapshots[0].name)+'.png');
+     notice=bundle?'Bundle downloaded':'Card downloaded';
+   });
+ }
  function previewState(){return {design:structuredClone(design),id,saved,preview,output,renderedCSS,context:structuredClone(context),error,previewWidth,previewHeight}}
  function rememberPreview(){
    const state=previewState();
@@ -394,7 +411,7 @@
 <div class="source-pane"><h3># Stylesheet <span class="editor-actions"><em>CSS / Jinja</em><button title="Format stylesheet (Ctrl+Alt+L)" aria-label="Format stylesheet" on:click={()=>cssEditor?.format()}>Format</button></span></h3><Editor bind:this={cssEditor} {dark} value={design.css} language="css" label="CSS source" change={v=>design.css=v}/></div>
 </div></section>
 <button class="grip" aria-label="Resize source panel" on:pointerdown={e=>resize(e,'left')} on:keydown={e=>{if(e.key==='ArrowRight')left=Math.min(38,left+1);if(e.key==='ArrowLeft')left=Math.max(15,left-1)}}></button>
-<section class="canvas"><div class="bar">02 / PREVIEW <span class="editor-actions"><button class="icon-button" aria-label="Copy card image" title="Copy card image" disabled={copying||!preview} on:click={copyImage}><Icon name="clone"/></button><select aria-label="Zoom" bind:value={zoom}><option value="fit">Fit</option><option value=".5">50%</option><option value="1">100%</option><option value="1.5">150%</option></select></span></div>
+<section class="canvas"><div class="bar">02 / PREVIEW <span class="editor-actions"><button class="icon-button" aria-label="Download card PNG" title="Download card PNG" disabled={busy||!!templateOpening||!preview} on:click={()=>downloadCards()}><Icon name="download"/></button>{#if previewTabs.length>1}<button class="icon-button" aria-label="Download bundle ZIP" title="Download bundle ZIP" disabled={busy||!!templateOpening} on:click={()=>downloadCards(true)}><Icon name="archive"/></button>{/if}<button class="icon-button" aria-label="Copy card image" title="Copy card image" disabled={copying||!preview} on:click={copyImage}><Icon name="clone"/></button><select aria-label="Zoom" bind:value={zoom}><option value="fit">Fit</option><option value=".5">50%</option><option value="1">100%</option><option value="1.5">150%</option></select></span></div>
 {#if previewTabs.length>1}<nav class="preview-tabs" role="tablist" aria-label="Card layouts">{#each previewTabs as tab,index (tab.key)}<button id={tab.key} role="tab" aria-selected={activePreviewId===tab.key} aria-controls="card-preview-panel" tabindex={activePreviewId===tab.key?0:-1} disabled={busy||!!templateOpening} class:active={activePreviewId===tab.key} on:click={()=>switchPreview(tab.key)} on:keydown={e=>previewTabKey(e,index)}>{activePreviewId===tab.key?design.name:tab.design.name}</button>{/each}</nav>{/if}
 <div class="preview-tab-panel" id="card-preview-panel" role={previewTabs.length>1?'tabpanel':undefined} aria-labelledby={previewTabs.length>1?activePreviewId:undefined}>
 <div class="stage" bind:clientWidth={width} bind:clientHeight={stageHeight}><div class="art"><div class="ruler" aria-hidden="true" style={"background-size:"+scale*32+"px 100%"}></div><small>SPECIMEN　 /　{cardWidth} × {cardHeight}</small><div style={'width:'+cardWidth*scale+'px;height:'+cardHeight*scale+'px'}><iframe title="Card preview" sandbox="" srcdoc={preview} style={'width:'+cardWidth+'px;height:'+cardHeight+'px;transform:scale('+scale+')'}></iframe></div></div></div>

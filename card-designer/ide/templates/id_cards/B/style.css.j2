@@ -1,20 +1,5 @@
-/* Structural placement is defined by the selected layout file. */
-.card { width: 100%; height: 100%; padding: {{ variation.margin }}px; font-size: {{ variation.font_size }}px; display: flex; flex-direction: column; gap: {{ variation.header_gap }}px; }
-.card-header { margin: 0; flex-shrink: 0; }
-.title-section { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 24px; align-items: start; }
-.title-section h1 { font-size: {{ variation.font_size * 1.5 }}px; margin: 0; }
-.title-section h2 { font-size: {{ variation.font_size * 1.15 }}px; text-align: right; margin: 0; }
-.data-item { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-.data-item p { margin: 3px 0 0; line-height: 1.2; }
-.data-item label { font-size: {{ variation.label_size }}px; margin: 0; }
-.field-grid, .dates { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: {{ variation.field_gap }}px 24px; align-content: start; }
-.full { grid-column: 1 / -1; }
-.physical-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.dates .issued { order: {{ variation.dates_reversed }}; }
-.dates .expires { order: {{ 1 - variation.dates_reversed }}; }
-.code-image { display: block; object-fit: contain; max-width: 100%; }
-
-.identity-body { display: grid; grid-template-columns: var(--portrait-columns); gap: {{ variation.column_gap }}px; align-items: start; }
+.identity-body { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--portrait-columns); gap: {{ variation.column_gap }}px; }
 .photo-section { grid-column: var(--portrait-column); grid-row: 1; }
-.main-photo { width: 340px; height: 450px; object-fit: cover; }
+.main-photo { width: 100%; height: 100%; }
 .identity-details { grid-column: var(--data-column); grid-row: 1; min-width: 0; }
+.identity-details { align-content: space-between; }
