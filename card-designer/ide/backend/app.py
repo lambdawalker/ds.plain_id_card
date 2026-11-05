@@ -4,6 +4,7 @@ import logging
 from hashlib import sha256
 import random
 import sqlite3
+import secrets
 from contextlib import closing, asynccontextmanager, contextmanager
 from concurrent.futures import Future, TimeoutError as FutureTimeout
 from queue import Queue, Empty
@@ -172,6 +173,8 @@ active_loader_stop = None
 catalog = {"records": {}, "photos": {}, "fields": {}, "types": {}, "sources": []}
 with closing(database()) as db, db:
     db.execute("CREATE TABLE IF NOT EXISTS dataset_source(id INTEGER PRIMARY KEY, reference TEXT UNIQUE NOT NULL)")
+    if "position" not in {row[1] for row in db.execute("PRAGMA table_info(dataset_source)")}:
+        db.execute("ALTER TABLE dataset_source ADD COLUMN position INTEGER NOT NULL DEFAULT 0")
 
 
 def index_reference(reference):
@@ -229,7 +232,7 @@ def rebuild_sources(stop=None):
     sources = []
     next_types = {}
     with closing(database()) as db:
-        rows = db.execute("SELECT id, reference FROM dataset_source ORDER BY id").fetchall()
+        rows = db.execute("SELECT id, reference FROM dataset_source ORDER BY position, id").fetchall()
     with parallel_indices(rows) as pending:
         for row in rows:
             if stop is not None and stop.is_set():
@@ -287,6 +290,24 @@ def datasets():
     return catalog["sources"]
 
 
+class DatasetOrder(BaseModel):
+    ids: list[int]
+
+
+@app.put("/api/datasets/order")
+def reorder_datasets(payload: DatasetOrder):
+    global catalog
+    with source_lock:
+        with closing(database()) as db, db:
+            existing = {row[0] for row in db.execute("SELECT id FROM dataset_source")}
+            if len(payload.ids) != len(existing) or set(payload.ids) != existing:
+                raise HTTPException(422, "Order must contain every dataset ID exactly once")
+            db.executemany("UPDATE dataset_source SET position=? WHERE id=?", enumerate(payload.ids))
+        ranks = {key: index for index, key in enumerate(payload.ids)}
+        catalog = {**catalog, "sources": sorted(catalog["sources"], key=lambda source: ranks[source["id"]])}
+        return catalog["sources"]
+
+
 @app.get("/api/datasets/status")
 def dataset_status():
     return {"loading": dataset_loading, "error": dataset_load_error}
@@ -299,7 +320,7 @@ def add_dataset(payload: DatasetReference):
         try:
             index_reference(reference)
             with closing(database()) as db, db:
-                db.execute("INSERT OR IGNORE INTO dataset_source(reference) VALUES (?)", (reference,))
+                db.execute("INSERT OR IGNORE INTO dataset_source(reference, position) VALUES (?, (SELECT COALESCE(MAX(position), -1) + 1 FROM dataset_source))", (reference,))
         except (OSError, ValueError, KeyError, TypeError) as exc:
             raise HTTPException(422, str(exc)) from exc
         return rebuild_sources()
@@ -327,14 +348,14 @@ def migrate_environment_source():
             if (candidate / "manifest.yaml").is_file():
                 source = str(candidate)
         if source:
-            db.execute("INSERT OR IGNORE INTO dataset_source(reference) VALUES (?)", (source,))
+            db.execute("INSERT OR IGNORE INTO dataset_source(reference, position) VALUES (?, (SELECT COALESCE(MAX(position), -1) + 1 FROM dataset_source))", (source,))
         db.execute("INSERT INTO source_migration VALUES (1)")
 
 
 def pending_sources():
     with closing(database()) as db:
         return [{"id": row[0], "reference": row[1], "count": 0, "error": "", "loading": True}
-                for row in db.execute("SELECT id, reference FROM dataset_source ORDER BY id")]
+                for row in db.execute("SELECT id, reference FROM dataset_source ORDER BY position, id")]
 
 
 def warm_datasets(stop):
@@ -367,6 +388,16 @@ def samples(q: str = "", offset: int = Query(default=0, ge=0), source_id: int | 
     from itertools import islice
     matches = (r for r in catalog["records"].values() if (source_id is None or r.get("source_id") == source_id) and q.casefold() in (r["name"] + r["id"]).casefold())
     return list(islice(matches, offset, offset + 24))
+
+
+@app.get("/api/samples/random")
+def random_sample(source_id: int | None = None, exclude: str = ""):
+    records = [record for record in catalog["records"].values()
+               if source_id is None or record.get("source_id") == source_id]
+    if not records:
+        raise HTTPException(404, "No records available in this dataset")
+    alternatives = [record for record in records if record["id"] != exclude]
+    return secrets.choice(alternatives or records)
 
 
 @app.get("/api/samples/{key}")

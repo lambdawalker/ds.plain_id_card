@@ -8,7 +8,9 @@
  import {css} from '@codemirror/lang-css';
  import {formatSource} from './format-output.js';
  export let value='', language='html', change=()=>{}, label='',dark=false, readOnly=false;
- const colors=new Compartment();
+ const colors=new Compartment(),wrapping=new Compartment();
+ let wordWrap=localStorage.getItem('wrap:'+label)==='true';
+ function toggleWrap(){wordWrap=!wordWrap;localStorage.setItem('wrap:'+label,String(wordWrap))}
  let host,view,formatting=false,formatError='';
  export async function format(){
    if(!view||readOnly||formatting)return;
@@ -35,11 +37,13 @@
    return false;
  }
  onMount(()=>{
-   view=new EditorView({parent:host,doc:value,extensions:[EditorView.domEventHandlers({keydown:formatKey}),colors.of(dark?oneDark:[]),basicSetup,language==='css'?css():language==='json'?json():html(),EditorState.readOnly.of(readOnly),EditorView.editable.of(!readOnly),EditorView.contentAttributes.of({'aria-label':label,...(readOnly?{'role':'textbox','aria-readonly':'true',tabindex:'0'}:{})}),EditorView.updateListener.of(u=>{if(u.docChanged) change(u.state.doc.toString())})]});
+   view=new EditorView({parent:host,doc:value,extensions:[EditorView.domEventHandlers({keydown:formatKey}),colors.of(dark?oneDark:[]),wrapping.of(wordWrap?EditorView.lineWrapping:[]),basicSetup,language==='css'?css():language==='json'?json():html(),EditorState.readOnly.of(readOnly),EditorView.editable.of(!readOnly),EditorView.contentAttributes.of({'aria-label':label,...(readOnly?{'role':'textbox','aria-readonly':'true',tabindex:'0'}:{})}),EditorView.updateListener.of(u=>{if(u.docChanged) change(u.state.doc.toString())})]});
    return ()=>{view.destroy();view=null};
  });
+ $: if(view)view.dispatch({effects:wrapping.reconfigure(wordWrap?EditorView.lineWrapping:[])});
  $: if(view)view.dispatch({effects:colors.reconfigure(dark?oneDark:[])});
  $: if(view && value!==view.state.doc.toString()) view.dispatch({changes:{from:0,to:view.state.doc.length,insert:value}});
 </script>
+<div class="editor-wrapbar"><button type="button" aria-label={'Word wrap '+label} aria-pressed={wordWrap} on:click={toggleWrap}>Wrap</button></div>
 <div class="editor" bind:this={host}></div>
 {#if formatError}<p class="format-error" role="alert">{formatError}</p>{/if}
