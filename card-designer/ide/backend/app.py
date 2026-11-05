@@ -23,6 +23,7 @@ from threading import RLock, Thread, Event
 from .photo_dataset import metadata, photo_index
 from .legacy import sample_template
 from .template_catalog import template_catalog, template_source, template_bundles
+from .card_fonts import embedded_card_font
 from .template_variations import resolve_parameters
 from .template_context import project_context, requirements
 from pydantic import BaseModel, Field
@@ -540,6 +541,9 @@ def preview(request: Preview):
         logger.exception("Template context failed: template=%r sample=%r: %s", d.template_id, d.sample, exc)
         raise HTTPException(422, f"Could not build template context: {exc}") from exc
     render_context['variation'] = d.template_parameters or {}
+    font_family = render_context['variation'].get('font_family')
+    if font_family:
+        render_context['card_font'] = embedded_card_font(font_family)
     context_summary['template_selection'] = {'bundle_id': d.bundle_id, 'template_id': d.template_id,
                                               'parameters': d.template_parameters}
     env = SandboxedEnvironment(undefined=StrictUndefined, autoescape=True)

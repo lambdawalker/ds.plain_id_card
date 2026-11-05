@@ -68,14 +68,14 @@ class TemplateBundleTest(unittest.TestCase):
             key=service.create(design)['id']
             saved=service.read(key)
             self.assertEqual(saved.bundle_id,'horizontal-identity')
-            self.assertEqual(saved.template_parameters,resolve_parameters('A-right',123))
+            self.assertEqual(saved.template_parameters,resolve_parameters('A-right',123, source['variation_version']))
             payload=json.loads(saved.model_dump_json())
             payload['seed']=124
             payload['template_parameters']['margin']=999
             saved=service.Design(**payload)
             service.update(key,saved)
             saved=service.read(key)
-            self.assertEqual(saved.template_parameters,resolve_parameters('A-right',124))
+            self.assertEqual(saved.template_parameters,resolve_parameters('A-right',124, source['variation_version']))
             preview=service.preview(service.Preview(design=saved))
             self.assertEqual(preview['context']['template_selection']['parameters'],saved.template_parameters)
             self.assertNotIn('{{',preview['css'])
@@ -92,3 +92,28 @@ class TemplateBundleTest(unittest.TestCase):
         for key,(low,high) in variation_schema('A-left',1).items():
             self.assertLessEqual(low,parameters[key])
             self.assertLessEqual(parameters[key],high)
+
+    def test_horizontal_font_replays_and_is_embedded_only_in_current_layouts(self):
+        for key in ('A-left', 'A-right'):
+            with self.subTest(template=key):
+                source = service.open_template(key)
+                designs = [service.Design(**source, seed=seed, color='#ffffff', background='plain')
+                           for seed in range(8)]
+                previews = [service.preview(service.Preview(design=design)) for design in designs]
+                families = set()
+                for design, preview in zip(designs, previews):
+                    parameters = preview['context']['template_selection']['parameters']
+                    family = parameters['font_family']
+                    families.add(family)
+                    self.assertIn(f'font-family: "{family}"', preview['css'])
+                    self.assertIn('data:font/ttf;base64,', preview['css'])
+                    self.assertEqual(preview, service.preview(service.Preview(design=design)))
+                    original = resolve_parameters(key, design.seed, 2)
+                    self.assertEqual({k: v for k, v in parameters.items() if k not in ('version', 'font_family')},
+                                     {k: v for k, v in original.items() if k != 'version'})
+                self.assertGreater(len(families), 1)
+                legacy = designs[0].model_copy(update={'variation_version': 2})
+                self.assertNotIn('@font-face', service.preview(service.Preview(design=legacy))['css'])
+        source = service.open_template('B-left')
+        design = service.Design(**source, seed=0, color='#ffffff', background='plain')
+        self.assertNotIn('@font-face', service.preview(service.Preview(design=design))['css'])
