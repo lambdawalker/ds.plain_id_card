@@ -132,7 +132,7 @@ Gallery templates A–G use the `assets` view model (`photo`, `barcode`, `slim_b
 
 Older saved templates using `ds`, `person` or extra `data` fields keep their compatibility context. Mixed templates can use both the old fields and new `assets` fields. Reopen gallery templates to adopt the new projections and layout constraints in an existing draft.
 
-The layout audit renders all seven templates over 64 seeds, checks text/image bounds and unintended overlaps, and permits the intentionally inset secondary portrait. Run against a running IDE server after installing drawing-tools development dependencies:
+The layout audit renders every catalog template over 64 seeds, checks text/image bounds and unintended overlaps, and permits the intentionally inset secondary portrait. Run against a running IDE server after installing drawing-tools development dependencies:
 
 ```sh
 CARD_SERVER=http://127.0.0.1:8765 npm --prefix ../packages/drawing-tools run test:layouts
@@ -140,4 +140,19 @@ CARD_SERVER=http://127.0.0.1:8765 npm --prefix ../packages/drawing-tools run tes
 
 `CARD_CHROMIUM` selects an existing Chromium binary; `LAYOUT_SEEDS` changes the seed count and `LAYOUT_REPORT` optionally saves JSON findings. Run with configured datasets and without them to cover image assets and missing-data placeholders. The audit validates bounded content; custom template text and typography still need visual review.
 
-A Horizontal keeps a stable field order (name, birth/sex, address, document, personal/nationality, issue/expiry) while allowing the main portrait to switch sides. Its faint grayscale secondary portrait is an opposite-side watermark beneath all field text. The browser layout audit checks its position, opacity, stacking and reading order across seeds.
+A Horizontal keeps a stable field order (name, birth/sex, address, document, personal/nationality, issue/expiry) with separate fixed-side portrait-left and portrait-right layouts. Its faint grayscale secondary portrait is an opposite-side watermark beneath all field text. The browser layout audit checks its position, opacity, stacking and reading order across seeds.
+
+## Template bundles and bounded variations
+`templates/bundles.yaml` groups related templates. The **Horizontal identity card** bundle starts with `A-left` and `A-right`: their portrait, text and watermark regions never switch sides when the seed changes. The gallery groups templates by bundle and previews each layout. `A` remains an API alias for `A-left`; older saved template source is preserved.
+
+A’s variation profile v1 permits only bounded changes: margins 24–32 px, body font 25–28 px, labels 15–17 px, field gaps 10–14 px, column gaps 28–36 px, header gaps 20–26 px, watermark opacity .08–.14, and the approved issue/expiry row ordering. The independent seeded stream does not change background or data generator random streams. Keep v1 stable; incompatible future changes require a new version.
+
+Saved designs and preview context record `bundle_id`, `template_id`, `variation_version` and resolved `template_parameters`. Supplied/stale parameter values are recomputed from the selected version, template and seed. The original B–G designs remain available in a clearly labeled legacy bundle until their structural variations are split into explicit templates.
+
+Bulk generation can cycle evenly through a bundle using an existing design for background, data selection and shared settings:
+
+```sh
+uv run --no-project --python 3.12 --with playwright python bulk.py --design 1 --bundle horizontal-identity --count 20 --output batch-01
+```
+
+The seed determines the starting variant; round-robin allocation keeps variant counts within one sample of each other. Each output `record.json` includes effective bundle/template IDs, seed and resolved parameters alongside the background recipe and bounding boxes. Without `--bundle`, bulk generation keeps the saved template.

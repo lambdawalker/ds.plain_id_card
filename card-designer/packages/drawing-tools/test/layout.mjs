@@ -14,7 +14,11 @@ try {
       '<iframe id="qa" sandbox="" style="border:0"></iframe>';
   });
   const reports = [];
-  for (const letter of "ABCDEFG") {
+  const catalog = await (
+    await page.request.get(base + "/api/templates")
+  ).json();
+  for (const item of catalog) {
+    const letter = item.id;
     const source = await (
       await page.request.get(base + "/api/templates/" + letter)
     ).json();
@@ -106,6 +110,17 @@ try {
             mark = root.querySelector(".small-photo").getBoundingClientRect();
           const onOppositeSide =
             mark.right <= photo.left || mark.left >= photo.right;
+          if (
+            (document
+              .querySelector("#view-port")
+              .dataset.case.startsWith("A-left-") &&
+              photo.left > mark.left) ||
+            (document
+              .querySelector("#view-port")
+              .dataset.case.startsWith("A-right-") &&
+              photo.left < mark.left)
+          )
+            throw Error("Explicit A portrait side changed with seed");
           if (!onOppositeSide)
             throw Error("A watermark must be opposite the main portrait");
           const watermark = root.querySelector(".small-photo-container");

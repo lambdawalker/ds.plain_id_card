@@ -6,7 +6,7 @@ from backend import app as service
 class TemplateCatalogTest(unittest.TestCase):
     def test_catalog_contains_all_original_variants_and_native_dimensions(self):
         items = service.list_templates()
-        self.assertEqual([item['id'] for item in items], list('ABCDEFG'))
+        self.assertEqual([item['id'] for item in items], ['A-left','A-right',*list('BCDEFG')])
         for item in items:
             self.assertGreater(item['height'], item['width']) if item['id'] in 'CD' else self.assertGreater(item['width'], item['height'])
             source = service.open_template(item['id'])

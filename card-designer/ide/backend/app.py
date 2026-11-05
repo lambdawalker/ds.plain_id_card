@@ -22,7 +22,8 @@ from .path_resolver import resolve
 from threading import RLock, Thread, Event
 from .photo_dataset import metadata, photo_index
 from .legacy import sample_template
-from .template_catalog import template_catalog, template_source
+from .template_catalog import template_catalog, template_source, template_bundles
+from .template_variations import resolve_parameters
 from .template_context import project_context, requirements
 from pydantic import BaseModel, Field
 
@@ -79,7 +80,20 @@ class Design(BaseModel):
     auto_theme: bool = False
     text_color: str = Field(default="#000000", pattern=r"^#[0-9a-fA-F]{6}$")
     template_id: str | None = None
+    bundle_id: str | None = None
+    variation_version: int = 1
+    template_parameters: dict | None = None
     common: dict = Field(default_factory=dict)
+
+
+def prepare_design(design):
+    try:
+        design.template_parameters = resolve_parameters(design.template_id, design.seed, design.variation_version)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if design.template_parameters is not None:
+        design.bundle_id = 'horizontal-identity'
+    return design
 
 
 class Preview(BaseModel):
@@ -100,10 +114,11 @@ def load(db, key):
     row = db.execute("SELECT payload FROM design WHERE id=?", (key,)).fetchone()
     if not row:
         raise HTTPException(404, "Design was deleted")
-    return Design.model_validate_json(row[0])
+    return prepare_design(Design.model_validate_json(row[0]))
 
 
 def insert(db, design):
+    design = prepare_design(design)
     return db.execute("INSERT INTO design(payload) VALUES (?)", (design.model_dump_json(),)).lastrowid
 
 
@@ -123,15 +138,16 @@ def read(key: int):
 @app.post("/api/designs")
 def create(design: Design):
     with closing(database()) as db, db:
-        return {"id": insert(db, design)}
+        return {"id": insert(db, design), "template_parameters": design.template_parameters, "bundle_id": design.bundle_id}
 
 
 @app.put("/api/designs/{key}")
 def update(key: int, design: Design):
+    design = prepare_design(design)
     with closing(database()) as db, db:
         load(db, key)
         db.execute("UPDATE design SET payload=? WHERE id=?", (design.model_dump_json(), key))
-    return {"id": key}
+    return {"id": key, "template_parameters": design.template_parameters, "bundle_id": design.bundle_id}
 
 
 @app.post("/api/designs/{key}/clone")
@@ -139,7 +155,7 @@ def clone(key: int):
     with closing(database()) as db, db:
         design = load(db, key)
         design.name = design.name[:155] + " copy"
-        return {"id": insert(db, design)}
+        return {"id": insert(db, design), "template_parameters": design.template_parameters, "bundle_id": design.bundle_id}
 
 
 @app.delete("/api/designs/{key}")
@@ -471,6 +487,19 @@ def template_a():
     return sample_template()
 
 
+@app.get("/api/template-bundles")
+def list_template_bundles():
+    return template_bundles()
+
+
+@app.get("/api/template-bundles/{key}")
+def open_bundle(key: str):
+    bundle = next((bundle for bundle in template_bundles() if bundle['id'] == key), None)
+    if bundle is None:
+        raise HTTPException(404, 'Unknown template bundle')
+    return bundle
+
+
 @app.get("/api/templates")
 def list_templates():
     return template_catalog()
@@ -486,7 +515,7 @@ def open_template(key: str):
 
 @app.post("/api/preview")
 def preview(request: Preview):
-    d = request.design
+    d = prepare_design(request.design)
     snapshot = catalog
     person = snapshot["records"].get(d.sample) if d.sample else {}
     if person is None:
@@ -510,6 +539,9 @@ def preview(request: Preview):
     except (OSError, ValueError, KeyError, TypeError) as exc:
         logger.exception("Template context failed: template=%r sample=%r: %s", d.template_id, d.sample, exc)
         raise HTTPException(422, f"Could not build template context: {exc}") from exc
+    render_context['variation'] = d.template_parameters or {}
+    context_summary['template_selection'] = {'bundle_id': d.bundle_id, 'template_id': d.template_id,
+                                              'parameters': d.template_parameters}
     env = SandboxedEnvironment(undefined=StrictUndefined, autoescape=True)
     env.filters["random"] = rng.choice
     result = {}

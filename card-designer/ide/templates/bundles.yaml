@@ -1,0 +1,25 @@
+bundles:
+  - id: horizontal-identity
+    name: Horizontal identity card
+    description: Fixed portrait placement with bounded, reproducible typography and spacing variations.
+    templates:
+      - id: A-left
+        name: Portrait left
+        folder: A
+        layout: portrait-left
+        variation_version: 1
+      - id: A-right
+        name: Portrait right
+        folder: A
+        layout: portrait-right
+        variation_version: 1
+  - id: original-layouts
+    name: Original layouts · legacy
+    description: Original B–G templates retained while their structural variations are migrated into explicit layouts.
+    templates:
+      - {id: B, folder: B, name: B · Horizontal card}
+      - {id: C, folder: C, name: C · Vertical card}
+      - {id: D, folder: D, name: D · Vertical card}
+      - {id: E, folder: E, name: E · Horizontal card back}
+      - {id: F, folder: F, name: F · Horizontal card back}
+      - {id: G, folder: G, name: G · Horizontal card back}
