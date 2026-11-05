@@ -11,7 +11,8 @@
  let theme=localStorage.getItem('studio-theme')||'system',zoom='fit',width=720,stageHeight=600,tab='HTML',serial=0;
  let media=window.matchMedia("(prefers-color-scheme: dark)"),systemDark=media.matches;
  $: dark=theme==="dark"||(theme==="system"&&systemDark);
- let recipeText='',recipeOpen=false,recipeError='';
+ let recipeText='',recipeOpen=false,recipeError='',recipeWrap=true,fieldWrap=true;
+ let draggingSource=null,dropSource=null,orderBusy=false,randomizing=false,randomSerial=0;
  let settingsPanel,settingsTrigger,settingsOpen=false,settingsTop=110,settingsLeft=16;
  let datasetSettingsPanel,datasetSettingsOpen=false,datasetSettingsTop=110,datasetSettingsLeft=16;
  function toggleDatasetSettings(e){
@@ -21,11 +22,20 @@
    datasetSettingsLeft=Math.max(12,Math.min(rect.left,window.innerWidth-292));
    datasetSettingsPanel.showPopover();
  }
- function randomizeBackground(){
+ async function randomizeBackground(){
+   if(randomizing)return;
+   const request=++randomSerial,source=sourceId,previous=design.sample;
    const families=['type-b','type-b-v1','type-c-v1','type-d-v1','type-a-v1','plain'].filter(family=>family!==design.background);
    const values=crypto.getRandomValues(new Uint32Array(2));
    design={...design,background:families[values[0]%families.length],seed:values[1],background_recipe:null};
    recipeOpen=false;
+   if(source===null||!activeSource?.count)return;
+   randomizing=true;
+   try{
+     const record=await api('samples/random?source_id='+source+'&exclude='+encodeURIComponent(previous));
+     if(request===randomSerial&&sourceId===source&&design.sample===previous)design.sample=record.id;
+   }catch(e){if(request===randomSerial)notice=e.message}
+   finally{if(request===randomSerial)randomizing=false}
  }
  function positionSettings(){
    if(!settingsTrigger)return;
@@ -42,8 +52,9 @@
    try{design={...design,background_recipe:JSON.parse(recipeText)};recipeOpen=false}
    catch(e){recipeError=e.message}
  }
- let inspector='Inspect',datasetRefs=[],reference='',sourceError='',sourceId=null,sourceRecords=[],sourceSearch='',sourceOffset=0,sourceImage='',sourceColumns=4;
+ let inspector='Inspect',datasetRefs=[],reference='',sourceError='',sourceId=null,sourceRecords=[],sourceSearch='',sourceQuery='',sourceOffset=0,sourceImage='',sourceColumns=4;
  let sourceDialog,addError='',sourceBusy=false,sourceListLoading=true,sourceLoading=false,sourceSerial=0,datasetsBooting=true,sourcePoll,sourcesDisposed=false;
+ let sourceGrid,sourceMoreLoading=false,sourceHasMore=true;
  let datasetSplit,datasetGridSize=50,selectedField='';
  let selectedRecord=null,selectedFields={},selectedFieldTypes={},recordError='',recordLoading=false,recordSerial=0,recordKey;
  $: if(ready&&design.sample!==recordKey){recordKey=design.sample;loadRecord(design.sample)}
@@ -100,7 +111,7 @@
      datasetRefs=sources;datasetsBooting=status.loading;
      sourceListLoading=datasetsBooting&&!datasetRefs.length;
      if(sourceId===null)await selectSource(datasetRefs[0]?.id??null);
-     else await browseSource(sourceOffset);
+     else await browseSource();
      if(sourcesDisposed)return;
      if(status.error)sourceError=status.error;
      if(wasLoading&&!datasetsBooting){
@@ -110,26 +121,45 @@
    }catch(e){sourceError=e.message;sourceListLoading=false;datasetsBooting=false}
    finally{if(!sourcesDisposed&&datasetsBooting)sourcePoll=setTimeout(loadSources,500)}
  }
- async function browseSource(start=0){
-   const current=++sourceSerial;
-   sourceOffset=start;sourceRecords=[];sourceError='';sourceLoading=sourceId!==null;
-   if(sourceId===null)return;
-   if(datasetRefs.find(source=>source.id===sourceId)?.loading)return;
+ async function browseSource(start=0,append=false){
+   const current=++sourceSerial,key=sourceId;
+   if(!append)sourceQuery=sourceSearch;
+   const query=sourceQuery;
+   if(!append){sourceRecords=[];sourceOffset=0;sourceHasMore=true}
+   sourceError='';sourceLoading=!append&&key!==null;sourceMoreLoading=append;
+   if(key===null){sourceLoading=false;sourceMoreLoading=false;sourceHasMore=false;return}
+   if(datasetRefs.find(source=>source.id===key)?.loading){sourceMoreLoading=false;return}
    try{
-     const records=await api('samples?offset='+start+'&q='+encodeURIComponent(sourceSearch)+'&source_id='+sourceId);
-     if(current===sourceSerial)sourceRecords=records;
+     const records=await api('samples?offset='+start+'&q='+encodeURIComponent(query)+'&source_id='+key);
+     if(current===sourceSerial){sourceRecords=append?[...sourceRecords,...records]:records;sourceOffset=sourceRecords.length;sourceHasMore=records.length===24}
    }catch(e){if(current===sourceSerial)sourceError=e.message}
-   finally{if(current===sourceSerial)sourceLoading=false}
+   finally{if(current===sourceSerial){sourceLoading=false;sourceMoreLoading=false;await tick();maybeMore()}}
  }
+ function maybeMore(){
+   if(sourceGrid&&sourceHasMore&&!sourceLoading&&!sourceMoreLoading&&!sourceError&&sourceGrid.clientHeight>0&&sourceGrid.scrollHeight-sourceGrid.scrollTop-sourceGrid.clientHeight<160)browseSource(sourceRecords.length,true);
+ }
+ $: if(sourceColumns&&datasetGridSize)tick().then(maybeMore);
  async function selectSource(key){
    if(datasetSettingsPanel?.matches(':popover-open'))datasetSettingsPanel.hidePopover();
-   if(sourceId!==null)sourceViews.set(sourceId,{search:sourceSearch,offset:sourceOffset,image:sourceImage,columns:sourceColumns});
-   sourceId=key;
+   if(sourceId!==null)sourceViews.set(sourceId,{search:sourceSearch,query:sourceQuery,image:sourceImage,columns:sourceColumns,records:sourceRecords,hasMore:sourceHasMore,scroll:sourceGrid?.scrollTop??0});
+   sourceSerial++;sourceLoading=false;sourceMoreLoading=false;sourceError='';sourceId=key;
    const view=sourceViews.get(key);
-   sourceSearch=view?.search??'';sourceImage=view?.image??'';sourceColumns=view?.columns??4;
-   await browseSource(view?.offset??0);
+   sourceSearch=view?.search??'';sourceQuery=view?.query??'';sourceImage=view?.image??'';sourceColumns=view?.columns??4;
+   if(view?.records.length){sourceRecords=view.records;sourceHasMore=view.hasMore;sourceOffset=sourceRecords.length;await tick();if(sourceGrid)sourceGrid.scrollTop=view.scroll;maybeMore()}
+   else await browseSource();
  }
+ async function moveSource(from,to){
+   if(orderBusy||sourceBusy||datasetsBooting||from===to)return;
+   const previous=datasetRefs,index=datasetRefs.findIndex(source=>source.id===from),target=datasetRefs.findIndex(source=>source.id===to);
+   if(index<0||target<0)return;
+   const reordered=[...datasetRefs], [source]=reordered.splice(index,1);reordered.splice(target,0,source);datasetRefs=reordered;orderBusy=true;
+   try{datasetRefs=await api('datasets/order','PUT',{ids:reordered.map(source=>source.id)})}
+   catch(e){datasetRefs=previous;sourceError=e.message}
+   finally{orderBusy=false}
+ }
+ function sourceDrop(e,key){e.preventDefault();const from=draggingSource;draggingSource=null;dropSource=null;if(from!==null)moveSource(from,key)}
  function sourceTabKey(e,index){
+   if(e.altKey&&['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();const next=index+(e.key==='ArrowRight'?1:-1);if(next>=0&&next<datasetRefs.length)moveSource(datasetRefs[index].id,datasetRefs[next].id);return}
    const keys=['ArrowLeft','ArrowRight','Home','End'];
    if(!keys.includes(e.key))return;
    e.preventDefault();
@@ -137,9 +167,9 @@
    selectSource(datasetRefs[next].id);
    document.getElementById('source-tab-'+datasetRefs[next].id)?.focus();
  }
- function showSourceDialog(){reference='';addError='';sourceDialog.showModal()}
+ function showSourceDialog(){if(orderBusy)return;reference='';addError='';sourceDialog.showModal()}
  async function addSource(){
-   if(sourceBusy||datasetsBooting||!reference.trim())return;
+   if(orderBusy||sourceBusy||datasetsBooting||!reference.trim())return;
    sourceBusy=true;addError='';
    try{
      const addedReference=reference.trim();
@@ -150,7 +180,7 @@
    finally{sourceBusy=false}
  }
  async function removeSource(key){
-   if(sourceBusy||datasetsBooting)return;
+   if(orderBusy||sourceBusy||datasetsBooting)return;
    sourceBusy=true;sourceError='';
    const index=datasetRefs.findIndex(source=>source.id===key);
    try{
@@ -176,6 +206,7 @@
  $: scale=zoom==='fit'?Math.min(1.6,Math.max(.05,Math.min((width-72)/cardWidth,(stageHeight-96)/cardHeight))):Number(zoom);
  async function refresh(){designs=await api('designs')}
  async function open(key){
+   randomSerial++;randomizing=false;
    const next=themedDesign(key?await api('designs/'+key):{...starter});
    id=key; design=next; saved=JSON.stringify(next); notice='';
  }
@@ -244,6 +275,7 @@
    templateOpening=item.id;
    try{
      if(!await canLeave())return;
+     randomSerial++;randomizing=false;
      const source=item.source||await api('templates/'+encodeURIComponent(item.id));
      const settings=currentSettings();
      id=null;saved=JSON.stringify(starter);design={...starter,...source,...settings};notice='';
@@ -310,7 +342,7 @@
 <span class="grow"></span><label>Theme <select bind:value={theme}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label></header>
 <div class="toolbar"><label>Design <input bind:value={design.name} maxlength="160"></label>
 <button class="icon-button" bind:this={settingsTrigger} title="Background settings" aria-label="Background settings" aria-haspopup="dialog" aria-controls="background-settings" aria-expanded={settingsOpen} on:click={toggleSettings}><Icon name="background"/></button>
-<button class="icon-button" title="Randomize background" aria-label="Randomize background" on:click={randomizeBackground}><Icon name="shuffle"/></button>
+<button class="icon-button" title="Randomize background" aria-label="Randomize background" disabled={randomizing||busy||!!templateOpening} on:click={randomizeBackground}><Icon name="shuffle"/></button>
 </div>
 <div id="background-settings" class="background-settings" popover="auto" role="dialog" aria-labelledby="background-settings-title" bind:this={settingsPanel} on:toggle={e=>settingsOpen=e.newState==='open'} style={'top:'+settingsTop+'px;left:'+settingsLeft+'px;max-height:calc(100dvh - '+(settingsTop+12)+'px)'}>
 <div class="settings-heading"><h2 id="background-settings-title">Background settings</h2><button class="icon-button" title="Close background settings" aria-label="Close background settings" on:click={()=>settingsPanel.hidePopover()}><Icon name="close"/></button></div>
@@ -323,8 +355,8 @@
 <label for="text-color">Text color</label><input id="text-color" aria-label="Text color" type="color" value={design.text_color||'#000000'} on:input={e=>{design={...design,text_color:e.target.value,auto_theme:false}}}>
 <label for="background-seed">Seed</label><input id="background-seed" type="number" min="0" max="4294967295" bind:value={design.seed}>
 <button disabled={!context.recipe} on:click={editRecipe}>Background parameters</button>
-{#if recipeOpen}<div class="settings-recipe"><h3>Background recipe</h3><p>Seed, family and color must match the active background.</p>
-<textarea aria-label="Background recipe" bind:value={recipeText} spellcheck="false"></textarea>
+{#if recipeOpen}<div class="settings-recipe"><h3>Background recipe<button aria-label="Word wrap background recipe" aria-pressed={recipeWrap} on:click={()=>recipeWrap=!recipeWrap}>Wrap</button></h3><p>Seed, family and color must match the active background.</p>
+<textarea wrap={recipeWrap?'soft':'off'} class:wrapped={recipeWrap} aria-label="Background recipe" bind:value={recipeText} spellcheck="false"></textarea>
 {#if recipeError}<p role="alert">{recipeError}</p>{/if}
 <div class="settings-recipe-actions"><button on:click={applyRecipe}>Apply</button><button on:click={()=>{design={...design,background_recipe:null};recipeOpen=false}}>Reset parameters</button><button on:click={()=>recipeOpen=false}>Cancel</button></div></div>{/if}
 </div></div>
@@ -341,7 +373,7 @@
 {#if error}<div role="alert">{error}</div>{/if}</section>
 <button class="grip" aria-label="Resize inspector" on:pointerdown={e=>resize(e,'right')} on:keydown={e=>{if(e.key==='ArrowLeft')right=Math.min(38,right+1);if(e.key==='ArrowRight')right=Math.max(15,right-1)}}></button>
 <section class="inspect" class:exploring={inspector==='Data sources'}><div class="bar">03 / EXPLORE</div>
-<nav aria-label="Right panel">{#each ['Inspect','Data sources'] as panel}<button class:active={inspector===panel} on:click={()=>{inspector=panel;if(panel==='Data sources'&&!sourceListLoading&&sourceId!==null)browseSource(sourceOffset)}}>{panel}</button>{/each}</nav>
+<nav aria-label="Right panel">{#each ['Inspect','Data sources'] as panel}<button class:active={inspector===panel} on:click={()=>{inspector=panel;if(panel==='Data sources'&&!sourceListLoading&&sourceId!==null){if(!sourceRecords.length)browseSource();else tick().then(maybeMore)}}}>{panel}</button>{/each}</nav>
 {#if inspector==='Data sources'}
 <div class="dataset-tabs-bar">
 <div class="dataset-tabs" role="tablist" aria-label="Dataset references" aria-busy={sourceListLoading}>
@@ -349,10 +381,10 @@
 <button class="active" role="tab" aria-selected="true" aria-controls="sources-loading-panel" disabled><span class="source-spinner" aria-hidden="true"></span>Loading datasets…</button>
 {/if}
 {#each datasetRefs as source,index (source.id)}
-<button id={'source-tab-'+source.id} role="tab" aria-selected={sourceId===source.id} aria-controls={'source-panel-'+source.id} tabindex={sourceId===source.id?0:-1} class:active={sourceId===source.id} title={source.reference} disabled={sourceBusy} on:click={()=>selectSource(source.id)} on:keydown={e=>sourceTabKey(e,index)}>{#if sourceId===source.id&&sourceLoading}<span class="source-spinner" aria-hidden="true"></span>{/if}{sourceLabel(source.reference)}</button>
+<button id={'source-tab-'+source.id} role="tab" aria-selected={sourceId===source.id} aria-controls={'source-panel-'+source.id} tabindex={sourceId===source.id?0:-1} class:active={sourceId===source.id} class:drop-target={dropSource===source.id} draggable={!sourceBusy&&!datasetsBooting&&!orderBusy} on:dragstart={e=>{draggingSource=source.id;e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',String(source.id))}} on:dragover={e=>{if(draggingSource!==null){e.preventDefault();dropSource=source.id;e.dataTransfer.dropEffect='move'}}} on:drop={e=>sourceDrop(e,source.id)} on:dragend={()=>{draggingSource=null;dropSource=null}} title={source.reference+' · Drag to reorder (Alt+Left/Right)'} disabled={sourceBusy||orderBusy} on:click={()=>selectSource(source.id)} on:keydown={e=>sourceTabKey(e,index)}>{#if sourceId===source.id&&sourceLoading}<span class="source-spinner" aria-hidden="true"></span>{/if}{sourceLabel(source.reference)}</button>
 {/each}
 </div>
-<button class="add-source" aria-label="Add dataset reference" title="Add dataset reference" disabled={sourceListLoading||datasetsBooting} on:click={showSourceDialog}>+</button>
+<button class="add-source" aria-label="Add dataset reference" title="Add dataset reference" disabled={orderBusy||sourceBusy||sourceListLoading||datasetsBooting} on:click={showSourceDialog}>+</button>
 </div>
 <div class="dataset-explorer" id={activeSource?'source-panel-'+activeSource.id:undefined} role={activeSource?'tabpanel':undefined} aria-labelledby={activeSource?'source-tab-'+activeSource.id:undefined} aria-busy={sourceListLoading||sourceLoading}>
 <div class="dataset-controls">
@@ -362,7 +394,7 @@
 <div class="settings-heading"><h2 id="dataset-settings-title">Dataset settings</h2><button class="icon-button" title="Close dataset settings" aria-label="Close dataset settings" on:click={()=>datasetSettingsPanel.hidePopover()}><Icon name="close"/></button></div>
 <p class="dataset-count">{activeSource.count} records</p>
 <div class="source-display-controls"><label>Display image<select aria-label="Display image" bind:value={sourceImage}><option value="">Default image</option>{#each sourceImageFields as field}<option value={field}>{field}</option>{/each}</select></label><label>Columns<select aria-label="Dataset columns" bind:value={sourceColumns}>{#each Array.from({length:8},(_,i)=>i+1) as columns}<option value={columns}>{columns}</option>{/each}</select></label></div>
-<button disabled={sourceBusy||datasetsBooting} on:click={()=>{datasetSettingsPanel.hidePopover();removeSource(activeSource.id)}}>Remove reference</button>
+<button disabled={orderBusy||sourceBusy||datasetsBooting} on:click={()=>{datasetSettingsPanel.hidePopover();removeSource(activeSource.id)}}>Remove reference</button>
 </div>
 {#if activeSource.error}<p role="alert">{activeSource.error}</p>{/if}
 <form class="source-search" on:submit|preventDefault={()=>browseSource()}><button type="button" class="icon-button" title="Dataset settings" aria-label="Dataset settings" aria-haspopup="dialog" aria-controls="dataset-settings" aria-expanded={datasetSettingsOpen} on:click={toggleDatasetSettings}><Icon name="settings"/></button><input aria-label="Search source records" placeholder="Search records…" bind:value={sourceSearch}><button>Search</button></form>
@@ -376,16 +408,16 @@
 {:else if !activeSource}<p>No dataset references. Use + to add a dataset.</p>
 {:else}
 {#if sourceLoading}<p role="status"><span class="source-spinner" aria-hidden="true"></span> Loading records…</p>
-{:else if !sourceError}
-<div class="records" style={'grid-template-columns:repeat('+sourceColumns+',minmax(0,1fr))'}>{#each sourceRecords as record}<button class:selected={design.sample===record.id} aria-pressed={design.sample===record.id} on:click={()=>design.sample=record.id}>{#if design.sample===record.id}<span class="selection-mark" aria-hidden="true">Selected</span>{/if}{#if sourcePhoto(record,sourceImage)}<img src={sourcePhoto(record,sourceImage)} alt="">{:else}<span class="missing-thumbnail">{sourceImage?'No '+sourceImage:'No image'}</span>{/if}{record.name}</button>{/each}</div>
+{:else}
+<div class="records" bind:this={sourceGrid} on:scroll={maybeMore} style={'grid-template-columns:repeat('+sourceColumns+',minmax(0,1fr))'}>{#each sourceRecords as record}<button class:selected={design.sample===record.id} aria-pressed={design.sample===record.id} on:click={()=>design.sample=record.id}>{#if design.sample===record.id}<span class="selection-mark" aria-hidden="true">Selected</span>{/if}{#if sourcePhoto(record,sourceImage)}<img src={sourcePhoto(record,sourceImage)} alt="">{:else}<span class="missing-thumbnail">{sourceImage?'No '+sourceImage:'No image'}</span>{/if}{record.name}</button>{/each}</div>
 {#if !sourceRecords.length}<p>No matching records.</p>{/if}
 {/if}
-<div class="source-pagination"><button disabled={sourceLoading||!sourceOffset} on:click={()=>browseSource(sourceOffset-24)}>Previous</button><button disabled={sourceLoading||sourceRecords.length<24} on:click={()=>browseSource(sourceOffset+24)}>Next</button></div>
+<div class="source-scroll-status">{#if sourceMoreLoading}<span role="status"><span class="source-spinner" aria-hidden="true"></span>Loading more records…</span>{:else if sourceError}<button on:click={()=>browseSource(sourceRecords.length,true)}>Retry loading records</button>{:else if !sourceHasMore&&sourceRecords.length}<small>All matching records loaded</small>{/if}</div>
 {/if}
 </div>
 <button class="grip row-grip dataset-divider" aria-label="Resize dataset grid and record fields" role="separator" aria-orientation="horizontal" aria-valuenow={Math.round(datasetGridSize)} aria-valuemin="15" aria-valuemax="85" on:pointerdown={resizeDataset} on:keydown={datasetResizeKey}></button>
 <section class="dataset-fields-pane" aria-labelledby="record-fields-title" aria-busy={recordLoading}>
-<h3 id="record-fields-title">Record fields {#if recordInSource}<small>{selectedRecord.name}</small>{/if}</h3>
+<h3 id="record-fields-title">Record fields {#if recordInSource}<small>{selectedRecord.name}</small>{#if selectedFieldTypes[selectedField]!=='rawImage'}<button aria-label="Word wrap record field" aria-pressed={fieldWrap} on:click={()=>fieldWrap=!fieldWrap}>Wrap</button>{/if}{/if}</h3>
 {#if recordInSource&&!recordLoading}
 <nav class="record-field-tabs" role="tablist" aria-label="Record fields">{#each recordFields as [field,value],index}<button id={'record-field-tab-'+index} role="tab" aria-selected={selectedField===field} aria-controls="record-field-panel" tabindex={selectedField===field?0:-1} class:active={selectedField===field} on:click={()=>selectedField=field} on:keydown={e=>fieldTabKey(e,index)}>{field}</button>{/each}</nav>
 {/if}
@@ -393,7 +425,7 @@
 {#if recordLoading||(datasetsBooting&&design.sample)}<p role="status"><span class="source-spinner" aria-hidden="true"></span> Loading fields…</p>
 {:else if recordError}<p role="alert">{recordError}</p>
 {:else if recordInSource&&recordFields.length}
-<div class="record-field-panel" id="record-field-panel" role="tabpanel" tabindex="0" aria-labelledby={'record-field-tab-'+recordFields.findIndex(([field])=>field===selectedField)}>
+<div class="record-field-panel" class:word-wrapped={fieldWrap} id="record-field-panel" role="tabpanel" tabindex="0" aria-labelledby={'record-field-tab-'+recordFields.findIndex(([field])=>field===selectedField)}>
 {#if selectedFieldTypes[selectedField]==='rawImage'}<img src={selectedFields[selectedField]} alt={selectedField+' for '+selectedRecord.name}>{:else}<pre>{fieldText(selectedFields[selectedField])}</pre>{/if}
 </div>
 {:else if recordInSource}<p>No fields available for this record.</p>

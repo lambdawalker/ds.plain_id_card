@@ -34,6 +34,33 @@ class DatasetSourcesTest(unittest.TestCase):
         (root / "manifest.yaml").write_text(json.dumps(manifest))
         return root
 
+    def test_dataset_order_is_saved_without_reindexing_and_survives_rebuild(self):
+        for name in ["first", "second", "third"]:
+            service.add_dataset(service.DatasetReference(reference=str(self.dataset(name))))
+        ids = [source["id"] for source in service.datasets()][::-1]
+        with patch.object(service, "index_reference", side_effect=AssertionError("Order must not reindex")):
+            self.assertEqual([source["id"] for source in service.reorder_datasets(service.DatasetOrder(ids=ids))], ids)
+        self.assertEqual([source["id"] for source in service.pending_sources()], ids)
+        self.assertEqual([source["id"] for source in service.rebuild_sources()], ids)
+        with self.assertRaises(HTTPException):
+            service.reorder_datasets(service.DatasetOrder(ids=[ids[0]] * 3))
+        self.assertEqual([source["id"] for source in service.datasets()], ids)
+        added = service.add_dataset(service.DatasetReference(reference=str(self.dataset("fourth"))))
+        self.assertEqual([source["id"] for source in added][:3], ids)
+
+    def test_random_record_uses_requested_source_and_avoids_current_record(self):
+        root = self.dataset("random")
+        (root / "img" / "002.png").write_bytes(b"another image")
+        sources = service.add_dataset(service.DatasetReference(reference=str(root)))
+        key = sources[0]["id"]
+        records = service.samples(source_id=key, offset=0)
+        result = service.random_sample(source_id=key, exclude=records[0]["id"])
+        self.assertEqual(result["id"], records[1]["id"])
+        service.add_dataset(service.DatasetReference(reference=str(self.dataset("other"))))
+        self.assertEqual(service.random_sample(source_id=key)["source_id"], key)
+        with self.assertRaises(HTTPException):
+            service.random_sample(source_id=-1)
+
     def test_no_builtin_people_and_static_preview_needs_no_sample(self):
         self.assertEqual(service.samples(offset=0), [])
         design = service.Design(name="static", template="<h1>Alex Rivera</h1>", css="", seed=1,
