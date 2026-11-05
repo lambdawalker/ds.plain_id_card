@@ -205,6 +205,48 @@ class DatasetHandler:
         return DatasetView(self, key)
 
 
+def identity_fields(person):
+    """Normalize common structured metadata names without inventing identity values."""
+    card = person.get('card', {})
+    card = card if isinstance(card, dict) else {}
+    profile = card.get('person', card.get('identity', card))
+    profile = profile if isinstance(profile, dict) else {}
+    nested = person.get('person', person.get('identity', {}))
+    nested = nested if isinstance(nested, dict) else {}
+    sources = [profile, card, nested, person]
+    def value(*keys):
+        for source in sources:
+            for key in keys:
+                item = source.get(key)
+                if isinstance(item, (str, int, float)) and not isinstance(item, bool) and str(item).strip():
+                    return str(item).strip()
+        return ''
+    given = value('given_names', 'given_name', 'first_name')
+    middle = value('middle_name', 'middle_names')
+    family = value('family_name', 'last_name', 'surname', 'surnames')
+    # A catalog record's top-level name is its filename, not a person's name.
+    full = value('full_name', 'display_name') or next((str(source['name']) for source in sources[:-1] if isinstance(source.get('name'), str)), '')
+    address = next((source.get('address') for source in sources if source.get('address')), {})
+    if isinstance(address, str):
+        line1, line2 = address, ''
+    else:
+        address = address if isinstance(address, dict) else {}
+        def part(*keys):
+            return next((str(address[key]) for key in keys if isinstance(address.get(key), (str, int)) and str(address[key]).strip()), '')
+        line1 = part('line1', 'address_line1', 'street_address') or ' '.join(filter(None, [part('number', 'house_number'), part('street', 'street_name')]))
+        line2 = part('line2', 'address_line2') or ', '.join(filter(None, [part('city', 'locality'), part('state', 'region'), part('postal_code', 'zip_code')]))
+    return {'given_names': ' '.join(filter(None, [given, middle])) or full or family,
+            'family_name': family if given else '', 'full_name': full or ' '.join(filter(None, [given, middle, family])),
+            'birth_date': value('date_of_birth', 'birth_date', 'dob'), 'sex': value('sex', 'gender'),
+            'address_line1': line1 or value('address_line1', 'street_address'),
+            'address_line2': line2 or value('address_line2'),
+            'document_number': value('document_number', 'document_no', 'id_number'),
+            'personal_number': value('personal_number', 'personal_no', 'curp'),
+            'nationality': value('nationality', 'country'),
+            'issue_date': value('issue_date', 'date_of_issue'),
+            'expiry_date': value('expiry_date', 'expiration_date', 'date_of_expiry')}
+
+
 def build_context(snapshot, design, person, rng):
     """Return render-only objects and a live JSON-ready provenance summary.
 
@@ -221,7 +263,8 @@ def build_context(snapshot, design, person, rng):
     data = {**person, 'id': person.get('record_id', person.get('name', str(seed))), 'index': ordinal}
     color = get('color', '#000000')
     text_color = get('text_color', '#000000')
-    summary = {'data': data, 'common': get('common', {}) or {},
+    identity = identity_fields(person)
+    summary = {'data': data, 'identity': identity, 'common': get('common', {}) or {},
                'env': {'theme': {'primary_color': color, 'text_color': text_color}},
                'datasets': {}, 'sources': [dict(source) for source in snapshot.get('sources', [])],
                'missing': [], 'generator': {'kind': 'synthetic', 'seed': seed}}
@@ -232,7 +275,7 @@ def build_context(snapshot, design, person, rng):
     text = TextGenerator(rng)
     gen = SimpleNamespace(text=text, random=RandomGenerator(rng), time=TimeGenerator(rng),
                           address=AddressGenerator(rng, text, person))
-    context = {'person': person, 'data': data, 'seed': seed, 'common': summary['common'],
+    context = {'person': person, 'identity': identity, 'data': data, 'seed': seed, 'common': summary['common'],
                'env': SimpleNamespace(theme=SimpleNamespace(primary_color=Color(color), text_color=Color(text_color))),
                'gen': gen, 'ds': ds}
     return context, summary

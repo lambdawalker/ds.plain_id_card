@@ -116,3 +116,8 @@ The generator restores the original HSLuv hue/saturation/lightness approach with
 
 ## Background output fidelity
 Before drawing a generated background, the renderer resolves the card’s logical width and height and the required backing resolution from preview zoom and display pixel density. It keeps at least native output resolution, capped at 4096 pixels per axis. Zooming re-renders the background at the required resolution rather than enlarging a small bitmap. Recipes retain logical dimensions and spacing; the resolution is part of the render cache key. Bulk output at the default display density draws at the saved card dimensions. Imported artwork retains its source resolution.
+
+## A Horizontal identity fields and image clipboard
+A Horizontal uses `identity` values normalized from the selected record’s structured metadata (`card`, nested `person` or `identity`, or top-level fields). Supported fields include names, date of birth, sex, structured/string address, document and personal numbers, nationality, issue date and expiry date. Missing values display a dash; record filenames are not used as personal names. Set `common.card_title` and `common.issuer` to customize the header. Open A again from the template gallery to use this version in an existing draft.
+
+The preview toolbar’s **Copy card image** button copies the last successfully displayed card as a PNG at its logical output dimensions, independent of preview zoom. Dataset images and artwork are embedded before capture. Image clipboard access requires HTTPS or localhost and a browser with PNG clipboard support; failures appear in the status bar.
