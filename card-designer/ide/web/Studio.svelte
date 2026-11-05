@@ -13,6 +13,20 @@
  $: dark=theme==="dark"||(theme==="system"&&systemDark);
  let recipeText='',recipeOpen=false,recipeError='';
  let settingsPanel,settingsTrigger,settingsOpen=false,settingsTop=110,settingsLeft=16;
+ let datasetSettingsPanel,datasetSettingsOpen=false,datasetSettingsTop=110,datasetSettingsLeft=16;
+ function toggleDatasetSettings(e){
+   if(datasetSettingsPanel.matches(':popover-open')){datasetSettingsPanel.hidePopover();return}
+   const rect=e.currentTarget.getBoundingClientRect();
+   datasetSettingsTop=Math.max(12,Math.min(rect.bottom+8,window.innerHeight-150));
+   datasetSettingsLeft=Math.max(12,Math.min(rect.left,window.innerWidth-292));
+   datasetSettingsPanel.showPopover();
+ }
+ function randomizeBackground(){
+   const families=['type-b','type-b-v1','type-c-v1','type-d-v1','type-a-v1','plain'].filter(family=>family!==design.background);
+   const values=crypto.getRandomValues(new Uint32Array(2));
+   design={...design,background:families[values[0]%families.length],seed:values[1],background_recipe:null};
+   recipeOpen=false;
+ }
  function positionSettings(){
    if(!settingsTrigger)return;
    const rect=settingsTrigger.getBoundingClientRect();
@@ -85,6 +99,7 @@
    finally{if(current===sourceSerial)sourceLoading=false}
  }
  async function selectSource(key){
+   if(datasetSettingsPanel?.matches(':popover-open'))datasetSettingsPanel.hidePopover();
    if(sourceId!==null)sourceViews.set(sourceId,{search:sourceSearch,offset:sourceOffset,image:sourceImage,columns:sourceColumns});
    sourceId=key;
    const view=sourceViews.get(key);
@@ -271,7 +286,8 @@
 <button class="icon-button" title="Delete design" aria-label="Delete design" disabled={busy||!id} on:click={()=>act(remove)}><Icon name="delete"/></button>
 <span class="grow"></span><label>Theme <select bind:value={theme}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label></header>
 <div class="toolbar"><label>Design <input bind:value={design.name} maxlength="160"></label>
-<button class="icon-button" bind:this={settingsTrigger} title="Background settings" aria-label="Background settings" aria-haspopup="dialog" aria-controls="background-settings" aria-expanded={settingsOpen} on:click={toggleSettings}><Icon name="settings"/></button>
+<button class="icon-button" bind:this={settingsTrigger} title="Background settings" aria-label="Background settings" aria-haspopup="dialog" aria-controls="background-settings" aria-expanded={settingsOpen} on:click={toggleSettings}><Icon name="background"/></button>
+<button class="icon-button" title="Randomize background" aria-label="Randomize background" on:click={randomizeBackground}><Icon name="shuffle"/></button>
 </div>
 <div id="background-settings" class="background-settings" popover="auto" role="dialog" aria-labelledby="background-settings-title" bind:this={settingsPanel} on:toggle={e=>settingsOpen=e.newState==='open'} style={'top:'+settingsTop+'px;left:'+settingsLeft+'px;max-height:calc(100dvh - '+(settingsTop+12)+'px)'}>
 <div class="settings-heading"><h2 id="background-settings-title">Background settings</h2><button class="icon-button" title="Close background settings" aria-label="Close background settings" on:click={()=>settingsPanel.hidePopover()}><Icon name="close"/></button></div>
@@ -282,7 +298,7 @@
 <label class="theme-toggle"><input type="checkbox" bind:checked={design.auto_theme}> Generate theme from seed</label>
 <button on:click={generateColorTheme}>Generate theme</button>
 <label for="text-color">Text color</label><input id="text-color" aria-label="Text color" type="color" value={design.text_color||'#000000'} on:input={e=>{design={...design,text_color:e.target.value,auto_theme:false}}}>
-<label for="background-seed">Seed</label><div class="seed-controls"><input id="background-seed" type="number" min="0" max="4294967295" bind:value={design.seed}><button on:click={()=>design.seed=crypto.getRandomValues(new Uint32Array(1))[0]}>⟳ Randomize</button></div>
+<label for="background-seed">Seed</label><input id="background-seed" type="number" min="0" max="4294967295" bind:value={design.seed}>
 <button disabled={!context.recipe} on:click={editRecipe}>Background parameters</button>
 {#if recipeOpen}<div class="settings-recipe"><h3>Background recipe</h3><p>Seed, family and color must match the active background.</p>
 <textarea aria-label="Background recipe" bind:value={recipeText} spellcheck="false"></textarea>
@@ -317,9 +333,12 @@
 </div>
 <div class="dataset-explorer" id={activeSource?'source-panel-'+activeSource.id:undefined} role={activeSource?'tabpanel':undefined} aria-labelledby={activeSource?'source-tab-'+activeSource.id:undefined} aria-busy={sourceListLoading||sourceLoading}>
 <div class="dataset-controls">
-<div class="dataset-selection"><small>Selected: {design.sample?(selectedRecord?.name||(recordLoading?'Loading…':'Unavailable')):'None'}</small><button disabled={!design.sample} on:click={()=>design.sample=''}>Clear selection</button></div>
 {#if activeSource}
-<div class="dataset-reference"><strong>{activeSource.reference}</strong><small>{activeSource.count} records</small><button disabled={sourceBusy||datasetsBooting} on:click={()=>removeSource(activeSource.id)}>Remove reference</button></div>
+<div class="dataset-summary"><button class="icon-button" title="Dataset settings" aria-label="Dataset settings" aria-haspopup="dialog" aria-controls="dataset-settings" aria-expanded={datasetSettingsOpen} on:click={toggleDatasetSettings}><Icon name="settings"/></button><small>{activeSource.count} records</small></div>
+<div id="dataset-settings" class="background-settings dataset-settings" popover="auto" role="dialog" aria-labelledby="dataset-settings-title" bind:this={datasetSettingsPanel} on:toggle={e=>datasetSettingsOpen=e.newState==='open'} style={'top:'+datasetSettingsTop+'px;left:'+datasetSettingsLeft+'px;max-height:calc(100dvh - '+(datasetSettingsTop+12)+'px)'}>
+<div class="settings-heading"><h2 id="dataset-settings-title">Dataset settings</h2><button class="icon-button" title="Close dataset settings" aria-label="Close dataset settings" on:click={()=>datasetSettingsPanel.hidePopover()}><Icon name="close"/></button></div>
+<button disabled={sourceBusy||datasetsBooting} on:click={()=>{datasetSettingsPanel.hidePopover();removeSource(activeSource.id)}}>Remove reference</button>
+</div>
 {#if activeSource.error}<p role="alert">{activeSource.error}</p>{/if}
 <form class="source-search" on:submit|preventDefault={()=>browseSource()}><input aria-label="Search source records" placeholder="Search records…" bind:value={sourceSearch}><button>Search</button></form>
 <div class="source-display-controls"><label>Display image<select aria-label="Display image" bind:value={sourceImage}><option value="">Default image</option>{#each sourceImageFields as field}<option value={field}>{field}</option>{/each}</select></label><label>Columns<select aria-label="Dataset columns" bind:value={sourceColumns}>{#each Array.from({length:8},(_,i)=>i+1) as columns}<option value={columns}>{columns}</option>{/each}</select></label></div>
