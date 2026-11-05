@@ -1,5 +1,6 @@
 <script>
  import {onMount,tick} from 'svelte';
+ import {copyCardImage} from './copy-image.js';
  import {formatOutput} from './format-output.js';
  import Editor from './Editor.svelte';
  import Icon from './Icon.svelte';
@@ -7,6 +8,8 @@
  import {starter} from './starter.js';
  import {themedDesign} from './color-theme.js';
  let design=themedDesign({...starter}), designs=[], id=null, saved='', ready=false, busy=false;
+ let copying=false,previewWidth=640,previewHeight=400;
+ async function copyImage(){if(copying||!preview)return;copying=true;try{await copyCardImage(preview,previewWidth,previewHeight);notice='Card image copied'}catch(e){notice='Could not copy image: '+e.message}finally{copying=false}}
  let preview='',output='',renderedCSS='',context={},error='',notice='';
  let theme=localStorage.getItem('studio-theme')||'system',zoom='fit',width=720,stageHeight=600,tab='HTML',serial=0;
  let media=window.matchMedia("(prefers-color-scheme: dark)"),systemDark=media.matches;
@@ -298,7 +301,7 @@
    const current=++serial;
    setTimeout(async()=>{if(current!==serial)return;
      try{const result=await renderCard(d,{scale:displayScale});if(current!==serial)return;
-       preview=result.html;output=result.template;renderedCSS=result.css;context={...(result.context||{}),seed:d.seed,sample:result.person,background:d.background,recipe:result.background_recipe};error='';
+       preview=result.html;previewWidth=d.width||640;previewHeight=d.height||400;output=result.template;renderedCSS=result.css;context={...(result.context||{}),seed:d.seed,sample:result.person,background:d.background,recipe:result.background_recipe};error='';
        const formatted=await Promise.all([formatOutput(result.template,'html'),formatOutput(result.css,'css')]);
        if(current===serial)[output,renderedCSS]=formatted;
      }catch(e){if(current===serial)error=e.message}
@@ -368,7 +371,7 @@
 <div class="source-pane"><h3># Stylesheet <span class="editor-actions"><em>CSS / Jinja</em><button title="Format stylesheet (Ctrl+Alt+L)" aria-label="Format stylesheet" on:click={()=>cssEditor?.format()}>Format</button></span></h3><Editor bind:this={cssEditor} {dark} value={design.css} language="css" label="CSS source" change={v=>design.css=v}/></div>
 </div></section>
 <button class="grip" aria-label="Resize source panel" on:pointerdown={e=>resize(e,'left')} on:keydown={e=>{if(e.key==='ArrowRight')left=Math.min(38,left+1);if(e.key==='ArrowLeft')left=Math.max(15,left-1)}}></button>
-<section class="canvas"><div class="bar">02 / PREVIEW <select aria-label="Zoom" bind:value={zoom}><option value="fit">Fit</option><option value=".5">50%</option><option value="1">100%</option><option value="1.5">150%</option></select></div>
+<section class="canvas"><div class="bar">02 / PREVIEW <span class="editor-actions"><button class="icon-button" aria-label="Copy card image" title="Copy card image" disabled={copying||!preview} on:click={copyImage}><Icon name="clone"/></button><select aria-label="Zoom" bind:value={zoom}><option value="fit">Fit</option><option value=".5">50%</option><option value="1">100%</option><option value="1.5">150%</option></select></span></div>
 <div class="stage" bind:clientWidth={width} bind:clientHeight={stageHeight}><div class="art"><div class="ruler" aria-hidden="true" style={"background-size:"+scale*32+"px 100%"}></div><small>SPECIMEN　 /　{cardWidth} × {cardHeight}</small><div style={'width:'+cardWidth*scale+'px;height:'+cardHeight*scale+'px'}><iframe title="Card preview" sandbox="" srcdoc={preview} style={'width:'+cardWidth+'px;height:'+cardHeight+'px;transform:scale('+scale+')'}></iframe></div></div></div>
 {#if error}<div role="alert">{error}</div>{/if}</section>
 <button class="grip" aria-label="Resize inspector" on:pointerdown={e=>resize(e,'right')} on:keydown={e=>{if(e.key==='ArrowLeft')right=Math.min(38,right+1);if(e.key==='ArrowRight')right=Math.max(15,right-1)}}></button>

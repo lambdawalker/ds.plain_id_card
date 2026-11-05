@@ -7,7 +7,7 @@ import unittest
 from jinja2 import StrictUndefined
 from jinja2.sandbox import SandboxedEnvironment
 
-from backend.render_context import build_context
+from backend.render_context import build_context, identity_fields
 
 
 class RenderContextTests(unittest.TestCase):
@@ -26,6 +26,31 @@ class RenderContextTests(unittest.TestCase):
         snapshot = snapshot or self.snapshot()
         person = next((row for row in snapshot['records'].values() if row['record_id'] == selected and 'photo_id' in row['dataset']), {})
         return build_context(snapshot, {'seed': seed, 'color': '#123456'}, person, random.Random(seed))
+
+    def test_identity_uses_structured_card_metadata_and_does_not_invent_values(self):
+        person = {'name':'person_001', 'card':{'person':{'first_name':'Elena', 'last_name':'Solano',
+                  'date_of_birth':'1994-03-18', 'gender':'F', 'document_number':'SPEC-100',
+                  'address':{'number':42,'street':'Cedar Lane','city':'El Paso','state':'TX','postal_code':'79901'}}}}
+        identity = identity_fields(person)
+        self.assertEqual(identity['given_names'], 'Elena')
+        self.assertEqual(identity['family_name'], 'Solano')
+        self.assertEqual(identity['birth_date'], '1994-03-18')
+        self.assertEqual(identity['address_line1'], '42 Cedar Lane')
+        self.assertEqual(identity['address_line2'], 'El Paso, TX, 79901')
+        self.assertEqual(identity['expiry_date'], '')
+        self.assertEqual(identity_fields({'name':'person_001'})['full_name'], '')
+        self.assertEqual(identity_fields({'card':{'display_name':'Elena Solano','surname':'Solano'}})['family_name'], '')
+
+    def test_horizontal_a_renders_identity_metadata_with_readable_labels(self):
+        from backend.template_catalog import template_source
+        context, _ = self.context()
+        context['identity'] = identity_fields({'card':{'full_name':'Elena <Solano>', 'birth_date':'1994-03-18'}})
+        env = SandboxedEnvironment(undefined=StrictUndefined, autoescape=True)
+        html = env.from_string(template_source('A')['template']).render(**context)
+        self.assertIn('Elena &lt;Solano&gt;', html)
+        self.assertIn('1994-03-18', html)
+        self.assertIn('DATE OF BIRTH', html)
+        self.assertNotIn('gen.', template_source('A')['template'])
 
     def test_selected_identity_and_cross_source_exact_stem(self):
         context, summary = self.context()

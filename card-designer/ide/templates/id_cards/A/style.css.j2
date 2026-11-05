@@ -22,5 +22,7 @@
 }
 
 .small-photo {
-    {{ ["right", "left"][direction] }}: {{ (range(5, 100) | random) }}mm;
+    top: auto;
+    bottom: 8mm;
+    {{ ["right", "left"][direction] }}: 8mm;
 }
