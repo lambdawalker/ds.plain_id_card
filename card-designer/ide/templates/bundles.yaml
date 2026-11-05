@@ -1,19 +1,18 @@
 bundles:
 - id: horizontal-identity
   name: Horizontal identity card
-  description: Fixed portrait placement with bounded, reproducible typography and
-    spacing variations.
+  description: Fixed portrait placement with seeded typefaces, typography and spacing.
   templates:
   - id: A-left
     name: Portrait left
     folder: A
     layout: portrait-left
-    variation_version: 2
+    variation_version: 3
   - id: A-right
     name: Portrait right
     folder: A
     layout: portrait-right
-    variation_version: 2
+    variation_version: 3
 - id: horizontal-details
   name: Horizontal identity · detailed
   description: Fixed structural layouts with dataset-backed fields and bounded seeded

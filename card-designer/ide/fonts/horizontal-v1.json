@@ -1,0 +1,66 @@
+[
+  {
+    "family": "Atkinson Hyperlegible Next",
+    "file": "atkinsonhyperlegiblenext/AtkinsonHyperlegibleNext[wght].ttf",
+    "weight": "200 800",
+    "study_number": 59,
+    "source": "https://github.com/google/fonts/tree/main/ofl/atkinsonhyperlegiblenext",
+    "sha256": "5a455d1cfa099b601ab70751bb9673e8fe1854dc4500c80e1a220d0d75e31745"
+  },
+  {
+    "family": "Public Sans",
+    "file": "publicsans/PublicSans[wght].ttf",
+    "weight": "100 900",
+    "study_number": 7,
+    "source": "https://github.com/google/fonts/tree/main/ofl/publicsans",
+    "sha256": "d75a7dc1a27eb9e336d5b33f55489d2ecb5621bf694d5c43b2415bce2ca830a8"
+  },
+  {
+    "family": "Be Vietnam Pro",
+    "file": "bevietnampro/BeVietnamPro-Regular.ttf",
+    "weight": "400",
+    "study_number": 120,
+    "source": "https://github.com/google/fonts/tree/main/ofl/bevietnampro",
+    "sha256": "cd1ef6e9d7db28ad5cdb88a65ccbe693870e60d340b791f349d248342b4fe4c3"
+  },
+  {
+    "family": "Hanken Grotesk",
+    "file": "hankengrotesk/HankenGrotesk[wght].ttf",
+    "weight": "100 900",
+    "study_number": 140,
+    "source": "https://github.com/google/fonts/tree/main/ofl/hankengrotesk",
+    "sha256": "813b3f8fa0965405669a89b38e51bbefd95eef6b8e20d1cb2d8c10cce062662f"
+  },
+  {
+    "family": "Inclusive Sans",
+    "file": "inclusivesans/InclusiveSans[wght].ttf",
+    "weight": "300 700",
+    "study_number": 144,
+    "source": "https://github.com/google/fonts/tree/main/ofl/inclusivesans",
+    "sha256": "52ae5fdb8eda45633f1e9817ebdb07d8075c89081d51204f16f78394608a5c4e"
+  },
+  {
+    "family": "Readex Pro",
+    "file": "readexpro/ReadexPro[HEXP,wght].ttf",
+    "weight": "160 700",
+    "study_number": 254,
+    "source": "https://github.com/google/fonts/tree/eb20e9cf19d97cf579fa3867d729d4222d6c59e1/ofl/readexpro",
+    "sha256": "268bba7e1e8f3b14d798b3fb0e40ebaa3fc39308c9ac0020e2faf6df181cc30e"
+  },
+  {
+    "family": "PT Sans Caption",
+    "file": "ptsanscaption/PT_Sans-Caption-Web-Regular.ttf",
+    "weight": "400",
+    "study_number": 302,
+    "source": "https://github.com/google/fonts/tree/eb20e9cf19d97cf579fa3867d729d4222d6c59e1/ofl/ptsanscaption",
+    "sha256": "91d763dd9e8284938be814b76919b0bd97510ec342434e7ec7a56f9fc58b36c4"
+  },
+  {
+    "family": "SUSE",
+    "file": "suse/SUSE[wght].ttf",
+    "weight": "100 900",
+    "study_number": 611,
+    "source": "https://github.com/google/fonts/tree/eb20e9cf19d97cf579fa3867d729d4222d6c59e1/ofl/suse",
+    "sha256": "16bda691d6c69df476d8c4edd8cf2a342576d7236793548fc876e31e8ea24fd8"
+  }
+]

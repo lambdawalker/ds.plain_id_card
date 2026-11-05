@@ -76,7 +76,7 @@
    datasetSettingsLeft=Math.max(12,Math.min(rect.left,window.innerWidth-292));
    datasetSettingsPanel.showPopover();
  }
- async function randomizeBackground(){
+ async function randomizeCard(){
    if(randomizing)return;
    const request=++randomSerial,source=sourceId,previous=design.sample;
    const families=['type-b','type-b-v1','type-c-v1','type-d-v1','type-a-v1','plain'].filter(family=>family!==design.background);
@@ -385,7 +385,7 @@
 <span class="grow"></span><label>Theme <select bind:value={theme}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label></header>
 <div class="toolbar"><label>Design <input bind:value={design.name} maxlength="160"></label>
 <button class="icon-button" bind:this={settingsTrigger} title="Background settings" aria-label="Background settings" aria-haspopup="dialog" aria-controls="background-settings" aria-expanded={settingsOpen} on:click={toggleSettings}><Icon name="background"/></button>
-<button class="icon-button" title="Randomize background" aria-label="Randomize background" disabled={randomizing||busy||!!templateOpening} on:click={randomizeBackground}><Icon name="shuffle"/></button>
+<button class="icon-button" title="Randomize card" aria-label="Randomize card" disabled={randomizing||busy||!!templateOpening} on:click={randomizeCard}><Icon name="shuffle"/></button>
 </div>
 <div id="background-settings" class="background-settings" popover="auto" role="dialog" aria-labelledby="background-settings-title" bind:this={settingsPanel} on:toggle={e=>settingsOpen=e.newState==='open'} style={'top:'+settingsTop+'px;left:'+settingsLeft+'px;max-height:calc(100dvh - '+(settingsTop+12)+'px)'}>
 <div class="settings-heading"><h2 id="background-settings-title">Background settings</h2><button class="icon-button" title="Close background settings" aria-label="Close background settings" on:click={()=>settingsPanel.hidePopover()}><Icon name="close"/></button></div>
