@@ -47,8 +47,8 @@
 .dataset-controls{flex-shrink:0;max-height:48%;overflow:auto;padding:12px 12px 0}
 .dataset-controls .dataset-reference{padding-bottom:8px;margin-bottom:8px}.dataset-controls .dataset-selection{margin-bottom:8px}.dataset-controls .source-search,.dataset-controls .source-display-controls{margin-bottom:8px}
 .dataset-split{display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);flex:1;min-height:0}
-.dataset-grid-pane{display:flex;flex-direction:column;min-height:0;overflow:hidden;padding:0 12px 10px}
-.dataset-grid-pane>.records{grid-auto-rows:max-content;flex:1;min-height:0;max-height:none;align-content:start;overflow:auto}.dataset-grid-pane>.source-pagination{flex-shrink:0}.dataset-grid-pane>p{font-size:12px}
+.dataset-grid-pane{display:flex;flex-direction:column;min-height:0;overflow:hidden;padding:0 12px}
+.dataset-grid-pane>.records{grid-auto-rows:max-content;flex:1;min-height:0;max-height:none;align-content:start;overflow:auto;margin-bottom:0}.dataset-grid-pane>.source-pagination{flex-shrink:0}.dataset-grid-pane>p{font-size:12px}
 .dataset-explorer .records button{position:relative}.dataset-explorer .records button.selected{background:color-mix(in srgb,var(--accent) 18%,var(--panel));box-shadow:inset 0 0 0 2px var(--accent)}.selection-mark{position:absolute;right:3px;top:3px;padding:2px 4px;border-radius:3px;background:var(--accent);color:white;font:9px system-ui}
 .dataset-fields-pane{display:flex;flex-direction:column;min-height:0;border-top:1px solid var(--line);overflow:hidden}.dataset-fields-pane h3{flex-shrink:0;justify-content:space-between;font-size:12px;padding:10px 12px}.dataset-fields-pane h3 small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:50%}.record-fields-scroll{flex:1;min-height:0;overflow:auto;padding:0 12px 12px}.record-fields-scroll>p{font-size:12px;line-height:1.5}.record-fields-scroll dl{margin:0}.record-field{padding:10px 0;border-bottom:1px solid var(--line)}.record-field dt{font:600 12px monospace;margin-bottom:6px;color:var(--muted)}.record-field dd{margin:0;min-width:0}.record-field pre{margin:0;padding:0;white-space:pre;overflow:auto;font:12px/1.5 monospace;max-height:200px}.record-field img{display:block;max-width:100%;max-height:160px;object-fit:contain;background:var(--bg)}
 @media(max-width:800px){.inspect.exploring{height:calc(100dvh - 16px)!important;max-height:none;min-height:560px}}
@@ -64,4 +64,4 @@
 .editor-wrapbar{display:flex;justify-content:flex-end;flex-shrink:0;padding:3px 10px;border-bottom:1px solid var(--line)}.editor-wrapbar button,.dataset-fields-pane h3 button,.settings-recipe h3 button{font-size:11px;padding:2px 6px}button[aria-pressed=true]{border-color:var(--accent);color:var(--accent)}
 .record-field-panel.word-wrapped pre{white-space:pre-wrap;overflow-wrap:anywhere}.settings-recipe textarea{white-space:pre}.settings-recipe textarea.wrapped{white-space:pre-wrap;overflow-wrap:anywhere}
 .dataset-tabs .drop-target{box-shadow:inset 3px 0 var(--accent)}.dataset-tabs button[draggable=true]{cursor:grab}.dataset-tabs button[draggable=true]:active{cursor:grabbing}
-.source-scroll-status{flex-shrink:0;min-height:20px;font-size:11px}.dataset-grid-pane>.records{overscroll-behavior:contain}
+.source-scroll-status{flex-shrink:0;font-size:11px}.source-scroll-status:empty{display:none}.dataset-grid-pane>.records{overscroll-behavior:contain}
