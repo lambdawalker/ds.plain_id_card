@@ -1,28 +1,22 @@
-.data-section {
-    display: flex;
-    flex-direction: {{ ["column", "column-reverse"] | random }};;
-}
+{%- set direction = [0, 1] | random -%}
 
-.name-holder {
-    display: flex;
-    align-items: center;
-    justify-items: stretch;
-    flex-direction: {{ ["row", "row-reverse"] | random }};
-}
+/* Mirror the photo and text regions, while preserving a stable reading order. */
+.card { display: flex; flex-direction: column; }
+.title-section { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); align-items: start; gap: 24px; }
+.title-section h1 { font-size: 42px; }
+.title-section h2 { font-size: 34px; text-align: right; }
+.card-header { margin-bottom: 24px; }
+.card-body { display: grid; grid-template-columns: {{ ['378px minmax(0, 1fr)', 'minmax(0, 1fr) 378px'][direction] }}; gap: 32px; align-items: start; }
+.photo-section { grid-column: {{ [1, 2][direction] }}; grid-row: 1; }
+.main-photo { width: 378px; height: 510px; object-fit: cover; }
+.data-section { grid-column: {{ [2, 1][direction] }}; grid-row: 1; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 14px; min-height: 510px; position: relative; isolation: isolate; }
+.name-holder { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.data-group, .key-curp { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.data-item { margin: 0; min-width: 0; }
+.data-item p { margin: 3px 0 0; }
+.data-item label { margin-bottom: 3px; }
+.data-section > :not(.small-photo-container) { position: relative; z-index: 1; }
 
-.name-holder > div {
-    flex-grow: 1;
-}
-
-{%- set direction = [0,1] | random -%}
-
-
-.card-body {
-    flex-direction: {{ ["row", "row-reverse"][direction] }};
-}
-
-.small-photo {
-    top: auto;
-    bottom: 8mm;
-    {{ ["right", "left"][direction] }}: 8mm;
-}
+/* An opposite-side watermark, behind every field rather than over the portrait. */
+.small-photo-container { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.small-photo { top: auto; bottom: 0; {{ ['right', 'left'][direction] }}: 0; width: 132px; height: 170px; object-fit: cover; opacity: .12; filter: grayscale(100%); }

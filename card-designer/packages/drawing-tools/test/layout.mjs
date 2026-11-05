@@ -97,6 +97,42 @@ try {
             element: img,
           });
         }
+        if (
+          document.querySelector("#view-port").dataset.case.startsWith("A-")
+        ) {
+          const photo = root
+              .querySelector(".main-photo")
+              .getBoundingClientRect(),
+            mark = root.querySelector(".small-photo").getBoundingClientRect();
+          const onOppositeSide =
+            mark.right <= photo.left || mark.left >= photo.right;
+          if (!onOppositeSide)
+            throw Error("A watermark must be opposite the main portrait");
+          const watermark = root.querySelector(".small-photo-container");
+          if (
+            Number(
+              getComputedStyle(root.querySelector(".small-photo")).opacity,
+            ) > 0.2 ||
+            Number(getComputedStyle(watermark).zIndex) >=
+              Number(
+                getComputedStyle(root.querySelector(".name-holder")).zIndex,
+              )
+          )
+            throw Error("A watermark must stay faint and below text");
+          const order = [
+            ".name",
+            ".date",
+            ".address",
+            ".key-voter",
+            ".key-curp",
+            ".bottom-row",
+          ].map(
+            (selector) =>
+              root.querySelector(selector).getBoundingClientRect().top,
+          );
+          if (order.some((y, index) => index && y < order[index - 1]))
+            throw Error("A field reading order is reversed");
+        }
         const outside = rects
             .filter(
               (r) =>
