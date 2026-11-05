@@ -1,4 +1,5 @@
 import {create, replay} from '@lambdawalker/drawing-tools';
+import {themedDesign} from './color-theme.js';
 export async function api(path, method='GET', data) {
   const response = await fetch('/api/'+path, {method, headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
   const result = await response.json();
@@ -23,9 +24,11 @@ function procedural(design){
   return generations.get(key);
 }
 export async function backgroundRecipe(design){
+  design=themedDesign(design);
   return design.background.endsWith('-v1')?(await procedural(design)).recipe:null;
 }
 export async function renderCard(design) {
+  design=themedDesign(design);
   const result = await api('preview','POST',{design});
   const {seed,color}=design,width=design.width||640,height=design.height||400;
   let background,background_recipe=null;
@@ -41,7 +44,7 @@ export async function renderCard(design) {
     background='url('+generated.url+') center/cover';
   }
   const policy="default-src 'none'; style-src 'unsafe-inline'; img-src data: "+location.origin+"/api/photos/ "+location.origin+"/api/artwork/; base-uri 'none'; form-action 'none'";
-  const html='<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="'+policy+'"><style>:root{color-scheme:light;color:#161616}*{box-sizing:border-box}body{margin:0}#view-port{position:relative;width:'+width+'px;height:'+height+'px;overflow:hidden;background:'+background+'}'+result.css+'</style><div id="view-port">'+result.template+'</div>';
+  const html='<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="'+policy+'"><style>:root{color-scheme:light;color:'+(design.text_color||'#000000')+'}*{box-sizing:border-box}body{margin:0}#view-port{position:relative;width:'+width+'px;height:'+height+'px;overflow:hidden;background:'+background+'}'+result.css+'</style><div id="view-port">'+result.template+'</div>';
   return {html,...result,background_recipe};
 }
 window.cardDesignerRender=renderCard;

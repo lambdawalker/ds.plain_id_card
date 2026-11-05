@@ -180,6 +180,7 @@ class DatasetSourcesTest(unittest.TestCase):
         self.assertEqual(record["images"]["slim_barcode"], record["slim_barcode"])
         self.assertEqual(service.photo(record["slim_barcode"].split("/")[-1]).path, barcode)
         self.assertEqual(sources[0]["count"], 1)
+        self.assertEqual(sources[0]["image_fields"], ["image", "slim_barcode"])
         design = service.Design(name="test", template='<img src="{{ person.slim_barcode }}">',
                                 css="", seed=1, color="#ffffff", background="plain", sample=record["id"])
         self.assertIn(record["slim_barcode"], service.preview(service.Preview(design=design))["template"])

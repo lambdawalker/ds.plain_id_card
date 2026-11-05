@@ -100,6 +100,11 @@ class RenderContextTests(unittest.TestCase):
         self.assertNotEqual(render(45), render(46))
         self.assertEqual(state, random.getstate())
 
+    def test_explicit_text_color_is_available_to_templates_and_context(self):
+        context, summary = build_context(self.snapshot(), {'seed':7, 'color':'#abcdef', 'text_color':'#123456'}, {}, random.Random(7))
+        self.assertEqual(context['env'].theme.text_color.to_rgb_hex(), '#123456')
+        self.assertEqual(summary['env']['theme']['text_color'], '#123456')
+
     def test_original_seven_templates_render_with_sandbox(self):
         root = Path(__file__).resolve().parents[4] / 'templates' / 'id_cards'
         env = SandboxedEnvironment(undefined=StrictUndefined, autoescape=True)

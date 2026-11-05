@@ -1,6 +1,6 @@
 /* Shared editor foundation for the original id_cards layouts.
    Their original ../_common_ stylesheets are absent from the repository. */
-html, body { margin: 0; padding: 0; font: 28px/1.25 Arial, sans-serif; color: #193837; }
+html, body { margin: 0; padding: 0; font: 28px/1.25 Arial, sans-serif; color: {{ env.theme.text_color.to_rgb_hex() }}; }
 * { box-sizing: border-box; }
 .card { position: relative; width: 357mm; height: 213mm; padding: 8mm; overflow: hidden; }
 .card-header { margin-bottom: 4mm; }

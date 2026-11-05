@@ -75,6 +75,8 @@ class Design(BaseModel):
     sample: str = ""
     width: int = Field(default=640, ge=160, le=4096)
     height: int = Field(default=400, ge=160, le=4096)
+    auto_theme: bool = False
+    text_color: str = Field(default="#000000", pattern=r"^#[0-9a-fA-F]{6}$")
     template_id: str | None = None
     common: dict = Field(default_factory=dict)
 
@@ -238,6 +240,7 @@ def rebuild_sources(stop=None):
                 if entries is None:
                     return catalog["sources"]
                 info["dataset"] = entries.dataset_id
+                info["image_fields"] = [name for name, kind in entries.field_types.items() if kind == "rawImage"]
                 def record_key(stem):
                     # Keep existing photo selections stable; namespace other dataset IDs.
                     identity = stem if entries.dataset_id.casefold() == "lambdawalker/ds.photo_id" else entries.dataset_id + "\0" + stem
