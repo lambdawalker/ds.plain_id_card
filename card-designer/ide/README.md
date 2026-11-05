@@ -172,7 +172,7 @@ The seed determines the starting variant; round-robin allocation keeps variant c
 A/B retain the v1 horizontal styling ranges. Vertical and back layouts use smaller family-specific fonts, margins and gaps, listed in each template’s `variation_schema`. Structural columns, code panels, portrait positions and barcode rotation stay fixed for every seed. Issue/expiry row order may vary within the declared profile.
 
 ### Bundle previews and editor tabs
-Each gallery bundle has a clickable stack of up to three overlapping previews and an **Open bundle** button. Opening a bundle creates one preview tab per template; individual templates can still be opened separately. Each tab keeps its own in-session HTML/CSS edits, selected data/background, saved design ID, preview and inspection output. **Save** and **Copy card image** act on the active tab. Arrow keys, Home and End navigate the preview tabs.
+The gallery shows exactly one clickable card per bundle: up to three overlapping layout previews, the bundle name and its template count. Clicking the card creates one preview tab per template. Each tab keeps its own in-session HTML/CSS edits, selected data/background, saved design ID, preview and inspection output. **Save** and **Copy card image** act on the active tab. Arrow keys, Home and End navigate the preview tabs.
 
 Replacing a bundle checks unsaved work in all tabs, including inactive ones. Cancel keeps the entire tab set; Discard replaces it. Save and template replacement are serialized to prevent late save results from updating a different draft. Saved designs persist individually; the open tab set is session state.
 
