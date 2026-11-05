@@ -3,6 +3,7 @@ from pathlib import Path
 import re
 
 import yaml
+from .template_context import ASSET_SOURCES
 
 ROOT = Path(__file__).resolve().parents[1] / "templates" / "id_cards"
 
@@ -16,7 +17,7 @@ def template_source(key):
     kind = info.get("class", "horizontal_card")
     width, height = (740, 1285) if kind == "vertical_card" else (1350, 806)
     template = (folder / "index.html.j2").read_text(encoding="utf-8")
-    required = sorted(set(re.findall(r"ds\.image\('([^']+)'", template)))
+    required = sorted({ASSET_SOURCES[key][0] for key in re.findall(r'assets\.([a-z_][a-z_0-9]*)', template) if key in ASSET_SOURCES})
     return {"id": key, "template_id": key, "name": f"{key} · {kind.replace('_', ' ').title()}",
             "description": info.get("description", "").strip(), "kind": kind,
             "width": width, "height": height, "required_datasets": required,

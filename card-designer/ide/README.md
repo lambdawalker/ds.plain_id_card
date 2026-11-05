@@ -125,4 +125,17 @@ The preview toolbar’s **Copy card image** button copies the last successfully 
 ### Structured card context
 The identity mapper supports `card.person.name.{first,middle,last,suffix}`, `card.person.birth.date`, `card.person.demographics`, `card.contact.address`, and `card.document.{type,number,issuing_authority,issued,expires}`. Address line2 retains both the unit/suite and locality. A Horizontal uses document type and issuing authority when common header overrides are absent.
 
-If the selected record has no identity values, context uses the aligned photo record as one complete identity source. `identity_source` records its dataset, record ID, index and whether it was selected or aligned. `card` exposes that source’s complete structured metadata. `selection` distinguishes an actual selected sample from seed-based fallback; legacy `data.id`/`data.index` remain the alignment anchor. Fields from separate identities are not merged. Dataset indices use natural record ordering, including numeric IDs (2 before 10). The `generator` entry describes only the synthetic `gen.*` compatibility utilities.
+If the selected record has no identity values, context uses the aligned photo record as one complete identity source. `identity_source` records its dataset, record ID, index and whether it was selected or aligned. `card` exposes that source’s complete structured metadata when explicitly requested by a template. `selection` distinguishes an actual selected sample from seed-based fallback; legacy `data.id`/`data.index` remain the alignment anchor. Fields from separate identities are not merged. Dataset indices use natural record ordering, including numeric IDs (2 before 10). The `generator` entry describes only the synthetic `gen.*` compatibility utilities.
+
+## Template data projection and layout verification
+Gallery templates A–G use the `assets` view model (`photo`, `barcode`, `slim_barcode`, `qrcode`, `pdf417`). The intermediary inspects Jinja references in HTML and CSS, resolves only declared image assets, and includes normalized identity or raw card metadata only when requested. Image-only templates do not read dataset JSON/text files; explicit identity/card or address-generator access retains the metadata it needs. The inspector receives compact `bindings` with record IDs, indices and source counts; whole dataset record payloads, portrait prompts and descriptions are omitted.
+
+Older saved templates using `ds`, `person` or extra `data` fields keep their compatibility context. Mixed templates can use both the old fields and new `assets` fields. Reopen gallery templates to adopt the new projections and layout constraints in an existing draft.
+
+The layout audit renders all seven templates over 64 seeds, checks text/image bounds and unintended overlaps, and permits the intentionally inset secondary portrait. Run against a running IDE server after installing drawing-tools development dependencies:
+
+```sh
+CARD_SERVER=http://127.0.0.1:8765 npm --prefix ../packages/drawing-tools run test:layouts
+```
+
+`CARD_CHROMIUM` selects an existing Chromium binary; `LAYOUT_SEEDS` changes the seed count and `LAYOUT_REPORT` optionally saves JSON findings. Run with configured datasets and without them to cover image assets and missing-data placeholders. The audit validates bounded content; custom template text and typography still need visual review.

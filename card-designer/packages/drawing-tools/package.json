@@ -10,7 +10,8 @@
   "scripts": {
     "check": "tsc --noEmit",
     "test": "node --test test/*.test.mjs",
-    "test:browser": "node test/render.mjs"
+    "test:browser": "node test/render.mjs",
+    "test:layouts": "node test/layout.mjs"
   },
   "dependencies": {
     "hsluv": "^1.0.1"

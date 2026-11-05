@@ -1,43 +1,76 @@
 <div class="card">
-    <header class="card-header">
-        <div class="title-section">
-            <h1>{{ common.get('card_title') or identity.document_type or 'IDENTITY CARD' }}</h1>
-            <h2>{{ common.get('issuer') or identity.issuing_authority or 'SPECIMEN' }}</h2>
-        </div>
-    </header>
-    <div class="small-photo-container">
-        <img class="small-photo" src="{{ ds.image('lambdaWalker/ds.photo_id', data.id, 'image') }}" data-class="photo" alt="Portrait">
+  <header class="card-header">
+    <div class="title-section">
+      <h1>{{ common.get('card_title') or identity.document_type or 'IDENTITY CARD' }}</h1>
+      <h2>{{ common.get('issuer') or identity.issuing_authority or 'SPECIMEN' }}</h2>
     </div>
-    <main class="card-body">
-        <div class="photo-section">
-            <img class="main-photo" src="{{ ds.image('lambdaWalker/ds.photo_id', data.id, 'image') }}" data-class="photo" alt="Portrait">
+  </header>
+  <main class="card-body">
+    <div class="photo-section">
+      <div class="small-photo-container">
+        <img
+          class="small-photo"
+          src="{{ assets.photo }}"
+          data-class="photo"
+          alt="Portrait"
+        />
+      </div>
+
+      <img
+        class="main-photo"
+        src="{{ assets.photo }}"
+        data-class="photo"
+        alt="Portrait"
+      />
+    </div>
+    <div class="data-section">
+      <div class="name-holder">
+        <div class="data-item name">
+          <label>NAME</label>
+          <p>{{ identity.given_names or '—' }}</p>
+          {% if identity.family_name %}
+          <p>{{ identity.family_name }}</p>
+          {% endif %}
         </div>
-        <div class="data-section">
-            <div class="name-holder">
-                <div class="data-item name">
-                    <label>NAME</label>
-                    <p>{{ identity.given_names or '—' }}</p>
-                    {% if identity.family_name %}<p>{{ identity.family_name }}</p>{% endif %}
-                </div>
-                <div class="data-group">
-                    <div class="data-item date"><label>DATE OF BIRTH</label><p>{{ identity.birth_date or '—' }}</p></div>
-                    <div class="data-item sex"><label>SEX</label><p>{{ identity.sex or '—' }}</p></div>
-                </div>
-            </div>
-            <div class="data-item address">
-                <label>ADDRESS</label>
-                <p>{{ identity.address_line1 or '—' }}</p>
-                {% if identity.address_line2 %}<p>{{ identity.address_line2 }}</p>{% endif %}
-            </div>
-            <div class="data-item key-voter"><div class="key"><label>DOCUMENT NUMBER</label><span>{{ identity.document_number or '—' }}</span></div></div>
-            <div class="data-item key-curp">
-                <div class="curp"><label>PERSONAL NUMBER</label><span>{{ identity.personal_number or '—' }}</span></div>
-                <div class="year"><label>NATIONALITY</label><span>{{ identity.nationality or '—' }}</span></div>
-            </div>
-            <div class="data-group bottom-row">
-                <div class="data-item state"><label>ISSUED</label><span>{{ identity.issue_date or '—' }}</span></div>
-                <div class="data-item state"><label>EXPIRES</label><span>{{ identity.expiry_date or '—' }}</span></div>
-            </div>
+        <div class="data-group">
+          <div class="data-item date">
+            <label>DATE OF BIRTH</label>
+            <p>{{ identity.birth_date or '—' }}</p>
+          </div>
+          <div class="data-item sex">
+            <label>SEX</label>
+            <p>{{ identity.sex or '—' }}</p>
+          </div>
         </div>
-    </main>
+      </div>
+      <div class="data-item address">
+        <label>ADDRESS</label>
+        <p>{{ identity.address_line1 or '—' }}</p>
+        {% if identity.address_line2 %}
+        <p>{{ identity.address_line2 }}</p>
+        {% endif %}
+      </div>
+      <div class="data-item key-voter">
+        <div class="key">
+          <label>DOCUMENT NUMBER</label><span>{{ identity.document_number or '—' }}</span>
+        </div>
+      </div>
+      <div class="data-item key-curp">
+        <div class="curp">
+          <label>PERSONAL NUMBER</label><span>{{ identity.personal_number or '—' }}</span>
+        </div>
+        <div class="year">
+          <label>NATIONALITY</label><span>{{ identity.nationality or '—' }}</span>
+        </div>
+      </div>
+      <div class="data-group bottom-row">
+        <div class="data-item state">
+          <label>ISSUED</label><span>{{ identity.issue_date or '—' }}</span>
+        </div>
+        <div class="data-item state">
+          <label>EXPIRES</label><span>{{ identity.expiry_date or '—' }}</span>
+        </div>
+      </div>
+    </div>
+  </main>
 </div>

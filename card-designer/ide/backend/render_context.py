@@ -167,7 +167,7 @@ class DatasetHandler:
             self.summary['datasets'].setdefault(record['dataset'], {'records': {}, 'count': len(self.rows(record['dataset']))})['records'][str(loaded['id'])] = loaded
         return self.cache[key]
 
-    def record(self, dataset, record=None):
+    def choose(self, dataset, record=None):
         rows = self.rows(dataset)
         if not rows:
             self._missing(dataset, '', 'dataset unavailable')
@@ -178,7 +178,11 @@ class DatasetHandler:
             stem = str(record if record is not None else self.person.get('record_id', self.ordinal))
             chosen = next((row for row in rows if str(row.get('record_id', row['id'])) == stem), None)
             chosen = chosen or rows[self.ordinal % len(rows)]
-        return self.load(chosen)
+        return chosen
+
+    def record(self, dataset, record=None):
+        chosen = self.choose(dataset, record)
+        return self.load(chosen) if chosen else {}
 
     def _missing(self, dataset, field, reason):
         entry = {'dataset': dataset, 'field': field, 'reason': reason}
@@ -186,7 +190,12 @@ class DatasetHandler:
             self.summary['missing'].append(entry)
 
     def image(self, dataset, record, field='image'):
-        item = self.record(dataset, record)
+        item = self.choose(dataset, record)
+        if item:
+            resolved = item['dataset']
+            key = str(item.get('record_id', item['id']))
+            self.summary['datasets'].setdefault(resolved, {'records': {}, 'count': len(self.rows(resolved))})['records'].setdefault(key,
+                {'id': key, 'index': self.groups[resolved].index(item)})
         url = item.get('images', {}).get(field)
         if not url:
             self._missing(dataset, field, 'image field unavailable')
@@ -259,7 +268,7 @@ def record_order(record):
                  for part in re.split(r'(\d+)', str(record.get('record_id', record['id']))))
 
 
-def build_context(snapshot, design, person, rng):
+def build_context(snapshot, design, person, rng, *, publish=None, include_identity=True):
     """Return render-only objects and a live JSON-ready provenance summary.
 
     Render both HTML and CSS with the same returned context. The summary's
@@ -275,7 +284,7 @@ def build_context(snapshot, design, person, rng):
     data = {**person, 'id': person.get('record_id', person.get('name', str(seed))), 'index': ordinal}
     color = get('color', '#000000')
     text_color = get('text_color', '#000000')
-    identity = identity_fields(person)
+    identity = identity_fields(person) if include_identity else {}
     summary = {'data': data, 'identity': identity, 'common': get('common', {}) or {},
                'env': {'theme': {'primary_color': color, 'text_color': text_color}},
                'datasets': {}, 'sources': [dict(source) for source in snapshot.get('sources', [])],
@@ -283,11 +292,13 @@ def build_context(snapshot, design, person, rng):
     ds = DatasetHandler(snapshot, person, ordinal, rng, summary)
     # Publish one aligned real record per source, including metadata and image URLs.
     for dataset in ds.groups:
+        if publish is not None and not any(normalize_dataset_id(dataset) == normalize_dataset_id(required) for required in publish):
+            continue
         ds.record(dataset, person.get('record_id', str(seed)))
     # Use one complete identity source. Never combine fields from unrelated people.
     primary = person
     origin = 'selected' if person else 'none'
-    if not any(identity.values()):
+    if include_identity and not any(identity.values()):
         photo_dataset = ds.resolve('lambdaWalker/ds.photo_id')
         if ds.rows(photo_dataset):
             primary = ds.record(photo_dataset, person.get('record_id', str(seed)))

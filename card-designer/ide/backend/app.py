@@ -23,7 +23,7 @@ from threading import RLock, Thread, Event
 from .photo_dataset import metadata, photo_index
 from .legacy import sample_template
 from .template_catalog import template_catalog, template_source
-from .render_context import build_context
+from .template_context import project_context, requirements
 from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -493,7 +493,11 @@ def preview(request: Preview):
         if dataset_loading:
             raise HTTPException(503, "Datasets are still loading. Please wait.")
         raise HTTPException(422, "Sample unavailable. Choose another record.")
-    if d.sample in snapshot["fields"]:
+    try:
+        requested = requirements(d.template, d.css)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if d.sample in snapshot["fields"] and (requested is None or requested['compatibility'] or requested['identity'] or requested['card'] or requested['address']):
         try:
             person = {**person, **metadata(snapshot["fields"][d.sample], snapshot["types"][d.sample])}
         except (OSError, ValueError) as exc:
@@ -502,7 +506,7 @@ def preview(request: Preview):
             raise HTTPException(422, f"Invalid metadata for dataset {person['dataset']}, record {person['record_id']}: {exc}") from exc
     rng = random.Random(d.seed)
     try:
-        render_context, context_summary = build_context(snapshot, d, person, rng)
+        render_context, context_summary = project_context(snapshot, d, person, rng)
     except (OSError, ValueError, KeyError, TypeError) as exc:
         logger.exception("Template context failed: template=%r sample=%r: %s", d.template_id, d.sample, exc)
         raise HTTPException(422, f"Could not build template context: {exc}") from exc
@@ -514,6 +518,8 @@ def preview(request: Preview):
             result[field] = env.from_string(getattr(d, field)).render(**render_context)
         except (TemplateError, IndexError, ArithmeticError, ValueError, TypeError) as exc:
             raise HTTPException(422, f"{field}, line {getattr(exc, 'lineno', '?')}: {exc}") from exc
+    if context_summary.get("projection") == "template":
+        person = {key: person[key] for key in ("id", "record_id", "name", "dataset", "source_id", "photo_url") if key in person}
     return {**result, "person": person, "context": context_summary}
 
 

@@ -46,6 +46,7 @@ class RenderContextTests(unittest.TestCase):
         context, _ = self.context()
         context['identity'] = identity_fields({'card':{'full_name':'Elena <Solano>', 'birth_date':'1994-03-18'}})
         env = SandboxedEnvironment(undefined=StrictUndefined, autoescape=True)
+        context['assets'] = {'photo': '/api/photos/photo-b'}
         html = env.from_string(template_source('A')['template']).render(**context)
         self.assertIn('Elena &lt;Solano&gt;', html)
         self.assertIn('1994-03-18', html)
@@ -83,6 +84,7 @@ class RenderContextTests(unittest.TestCase):
             self.assertEqual(context['person'], {})
             self.assertEqual(summary['data']['id'], '1')
             from backend.template_catalog import template_source
+            context['assets'] = {'photo': '/api/photos/photo-b'}
             html = SandboxedEnvironment(undefined=StrictUndefined, autoescape=True).from_string(template_source('A')['template']).render(**context)
             self.assertIn('Mei Ling', html)
             self.assertIn('New York DMV', html)

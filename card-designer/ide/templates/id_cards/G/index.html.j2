@@ -2,7 +2,7 @@
         <header>
             <span class="small-text">{{ gen.text.sentence((3,6)) }}</span>
             {%- if gen.random.boolean() %}
-            <img class="slim-barcode" src="{{ ds.image('lambdaWalker/ds.machine_readable_code', data.id, 'slim_barcode') }}" data-class="barcode" alt="Barcode">
+            <img class="slim-barcode" src="{{ assets.slim_barcode }}" data-class="barcode" alt="Barcode">
             {% endif %}
         </header>
 
@@ -12,10 +12,10 @@
             {% endif -%}
             <div class="photo-container">
                 {%- if gen.random.boolean() %}
-                    <img class="photo" src="{{ ds.image('lambdaWalker/ds.photo_id', data.id, 'image') }}" data-class="photo" alt="Photo">
+                    <img class="photo" src="{{ assets.photo }}" data-class="photo" alt="Photo">
                 {% else %}
                     {% for i in range([1,2,3] | random) %}
-                        <img class="qrcode" src="{{ ds.image('lambdaWalker/ds.machine_readable_code', data.id, 'qrcode') }}" data-class="qrcode" alt="qrcode">
+                        <img class="qrcode" src="{{ assets.qrcode }}" data-class="qrcode" alt="qrcode">
                     {% endfor %}
                 {% endif -%}
 
@@ -36,7 +36,7 @@
             {%- if gen.random.boolean() %}
             {% else %}
                 <p data-class="mrz-text" class="mrz-text">{{ gen.random.mrz() | e }}</p>
-                <img class="barcode" src="{{ ds.image('lambdaWalker/ds.machine_readable_code', data.id, 'barcode') }}" data-class="barcode" alt="barcode">
+                <img class="barcode" src="{{ assets.barcode }}" data-class="barcode" alt="barcode">
             {% endif %}
         </footer>
     </div>
