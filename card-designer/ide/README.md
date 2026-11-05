@@ -105,6 +105,8 @@ The gear beside the design name opens a floating **Background settings** panel w
 Switching saved designs, creating a design or opening a template with unsaved edits shows an integrated **Unsaved changes** dialog with **Keep editing** and **Discard changes**. Naming a new design and confirming deletion also use integrated dialogs. Browser-managed tab-close/reload warnings remain enabled to protect unsaved work; browsers do not permit replacing those warnings with custom HTML.
 
 ## Dataset explorer display controls
+The explorer fills the available panel height. Below its controls, equal-height panes show the record grid above and the selected record’s fields below; both scroll independently. The selected tile has an accent border, background and Selected badge. Fields include text, formatted JSON and every image field, and load independently of template rendering.
+
 Selecting a record updates the preview and keeps the explorer open, including the current search and page. Below Search, **Display image** selects which rawImage field supplies thumbnails; all image fields remain available to templates. **Columns** sets the grid from 1 to 8 columns, defaulting to 4. Search, pagination, display-image and column preferences are remembered separately for each dataset tab during the session. Missing selected image fields show an explicit placeholder rather than silently displaying a different field.
 
 ## Generated color themes

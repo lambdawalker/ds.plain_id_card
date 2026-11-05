@@ -30,6 +30,19 @@
  }
  let inspector='Inspect',datasetRefs=[],reference='',sourceError='',sourceId=null,sourceRecords=[],sourceSearch='',sourceOffset=0,sourceImage='',sourceColumns=4;
  let sourceDialog,addError='',sourceBusy=false,sourceListLoading=true,sourceLoading=false,sourceSerial=0,datasetsBooting=true,sourcePoll,sourcesDisposed=false;
+ let selectedRecord=null,selectedFields={},selectedFieldTypes={},recordError='',recordLoading=false,recordSerial=0,recordKey;
+ $: if(ready&&design.sample!==recordKey){recordKey=design.sample;loadRecord(design.sample)}
+ $: recordInSource=selectedRecord?.source_id===sourceId&&selectedRecord!==null;
+ $: recordFields=recordInSource?Object.entries(selectedFields):[];
+ async function loadRecord(key){
+   const current=++recordSerial;
+   selectedRecord=null;selectedFields={};selectedFieldTypes={};recordError='';recordLoading=!!key;
+   if(!key)return;
+   try{const result=await api('samples/'+encodeURIComponent(key));if(current===recordSerial){selectedRecord=result.record;selectedFields=result.fields;selectedFieldTypes=result.field_types}}
+   catch(e){if(current===recordSerial)recordError=e.message}
+   finally{if(current===recordSerial)recordLoading=false}
+ }
+ function fieldText(value){return typeof value==='string'?value:JSON.stringify(value,null,2)??String(value)}
  const sourceViews=new Map();
  $: activeSource=datasetRefs.find(source=>source.id===sourceId);
  $: sourceImageFields=activeSource?.image_fields??[...new Set(sourceRecords.flatMap(record=>Object.keys(record.images||{})))];
@@ -54,7 +67,7 @@
      if(sourcesDisposed)return;
      if(status.error)sourceError=status.error;
      if(wasLoading&&!datasetsBooting){
-       if(ready)schedule({...design});
+       if(ready){schedule({...design});if(design.sample)loadRecord(design.sample)}
        if(templateDialog?.open)showTemplates();
      }
    }catch(e){sourceError=e.message;sourceListLoading=false;datasetsBooting=false}
@@ -109,7 +122,7 @@
    }catch(e){sourceError=e.message}
    finally{sourceBusy=false}
  }
- onMount(()=>{loadSources();return ()=>{sourcesDisposed=true;clearTimeout(sourcePoll);sourceSerial++}});
+ onMount(()=>{loadSources();return ()=>{sourcesDisposed=true;clearTimeout(sourcePoll);sourceSerial++;recordSerial++}});
  let left=25,right=24,templateHeight=50,sourceEditors,templateEditor,cssEditor,assets=[];
  async function upload(e){
    const file=e.target.files[0];if(!file)return;
@@ -288,7 +301,7 @@
 <div class="stage" bind:clientWidth={width} bind:clientHeight={stageHeight}><div class="art"><div class="ruler" aria-hidden="true" style={"background-size:"+scale*32+"px 100%"}></div><small>SPECIMEN　 /　{cardWidth} × {cardHeight}</small><div style={'width:'+cardWidth*scale+'px;height:'+cardHeight*scale+'px'}><iframe title="Card preview" sandbox="" srcdoc={preview} style={'width:'+cardWidth+'px;height:'+cardHeight+'px;transform:scale('+scale+')'}></iframe></div></div></div>
 {#if error}<div role="alert">{error}</div>{/if}</section>
 <button class="grip" aria-label="Resize inspector" on:pointerdown={e=>resize(e,'right')} on:keydown={e=>{if(e.key==='ArrowLeft')right=Math.min(38,right+1);if(e.key==='ArrowRight')right=Math.max(15,right-1)}}></button>
-<section class="inspect"><div class="bar">03 / EXPLORE</div>
+<section class="inspect" class:exploring={inspector==='Data sources'}><div class="bar">03 / EXPLORE</div>
 <nav aria-label="Right panel">{#each ['Inspect','Data sources'] as panel}<button class:active={inspector===panel} on:click={()=>{inspector=panel;if(panel==='Data sources'&&!sourceListLoading&&sourceId!==null)browseSource(sourceOffset)}}>{panel}</button>{/each}</nav>
 {#if inspector==='Data sources'}
 <div class="dataset-tabs-bar">
@@ -302,29 +315,41 @@
 </div>
 <button class="add-source" aria-label="Add dataset reference" title="Add dataset reference" disabled={sourceListLoading||datasetsBooting} on:click={showSourceDialog}>+</button>
 </div>
-<div class="dataset-explorer" aria-busy={sourceListLoading||sourceLoading}>
-<div class="dataset-selection"><small>Selected: {context.sample?.name||'None'}</small><button disabled={!design.sample} on:click={()=>design.sample=''}>Clear selection</button></div>
-{#if sourceListLoading}
-<div id="sources-loading-panel" role="status"><span class="source-spinner" aria-hidden="true"></span> Loading datasets…</div>
-{:else if activeSource}
-<div id={'source-panel-'+activeSource.id} role="tabpanel" aria-labelledby={'source-tab-'+activeSource.id} tabindex="0">
+<div class="dataset-explorer" id={activeSource?'source-panel-'+activeSource.id:undefined} role={activeSource?'tabpanel':undefined} aria-labelledby={activeSource?'source-tab-'+activeSource.id:undefined} aria-busy={sourceListLoading||sourceLoading}>
+<div class="dataset-controls">
+<div class="dataset-selection"><small>Selected: {design.sample?(selectedRecord?.name||(recordLoading?'Loading…':'Unavailable')):'None'}</small><button disabled={!design.sample} on:click={()=>design.sample=''}>Clear selection</button></div>
+{#if activeSource}
 <div class="dataset-reference"><strong>{activeSource.reference}</strong><small>{activeSource.count} records</small><button disabled={sourceBusy||datasetsBooting} on:click={()=>removeSource(activeSource.id)}>Remove reference</button></div>
 {#if activeSource.error}<p role="alert">{activeSource.error}</p>{/if}
 <form class="source-search" on:submit|preventDefault={()=>browseSource()}><input aria-label="Search source records" placeholder="Search records…" bind:value={sourceSearch}><button>Search</button></form>
 <div class="source-display-controls"><label>Display image<select aria-label="Display image" bind:value={sourceImage}><option value="">Default image</option>{#each sourceImageFields as field}<option value={field}>{field}</option>{/each}</select></label><label>Columns<select aria-label="Dataset columns" bind:value={sourceColumns}>{#each Array.from({length:8},(_,i)=>i+1) as columns}<option value={columns}>{columns}</option>{/each}</select></label></div>
+{/if}
 {#if sourceError}<p role="alert">{sourceError}</p>{/if}
+</div>
+<div class="dataset-split">
+<div class="dataset-grid-pane" aria-label="Dataset records">
+{#if sourceListLoading}<p id="sources-loading-panel" role="status"><span class="source-spinner" aria-hidden="true"></span> Loading datasets…</p>
+{:else if !activeSource}<p>No dataset references. Use + to add a dataset.</p>
+{:else}
 {#if sourceLoading}<p role="status"><span class="source-spinner" aria-hidden="true"></span> Loading records…</p>
 {:else if !sourceError}
-<div class="records" style={'grid-template-columns:repeat('+sourceColumns+',minmax(0,1fr))'}>{#each sourceRecords as record}<button class:selected={design.sample===record.id} aria-pressed={design.sample===record.id} on:click={()=>design.sample=record.id}>{#if sourcePhoto(record,sourceImage)}<img src={sourcePhoto(record,sourceImage)} alt="">{:else}<span class="missing-thumbnail">{sourceImage?'No '+sourceImage:'No image'}</span>{/if}{record.name}</button>{/each}</div>
+<div class="records" style={'grid-template-columns:repeat('+sourceColumns+',minmax(0,1fr))'}>{#each sourceRecords as record}<button class:selected={design.sample===record.id} aria-pressed={design.sample===record.id} on:click={()=>design.sample=record.id}>{#if design.sample===record.id}<span class="selection-mark" aria-hidden="true">Selected</span>{/if}{#if sourcePhoto(record,sourceImage)}<img src={sourcePhoto(record,sourceImage)} alt="">{:else}<span class="missing-thumbnail">{sourceImage?'No '+sourceImage:'No image'}</span>{/if}{record.name}</button>{/each}</div>
 {#if !sourceRecords.length}<p>No matching records.</p>{/if}
 {/if}
-<div class="source-pagination"><button disabled={sourceLoading||!sourceOffset} on:click={()=>browseSource(sourceOffset-24)}>Previous</button>
-<button disabled={sourceLoading||sourceRecords.length<24} on:click={()=>browseSource(sourceOffset+24)}>Next</button></div>
-</div>
-{:else}
-{#if sourceError}<p role="alert">{sourceError}</p>{/if}
-{#if !sourceError}<p>No dataset references. Use + to add a dataset.</p>{/if}
+<div class="source-pagination"><button disabled={sourceLoading||!sourceOffset} on:click={()=>browseSource(sourceOffset-24)}>Previous</button><button disabled={sourceLoading||sourceRecords.length<24} on:click={()=>browseSource(sourceOffset+24)}>Next</button></div>
 {/if}
+</div>
+<section class="dataset-fields-pane" aria-labelledby="record-fields-title" aria-busy={recordLoading}>
+<h3 id="record-fields-title">Record fields {#if recordInSource}<small>{selectedRecord.name}</small>{/if}</h3>
+<div class="record-fields-scroll">
+{#if recordLoading||(datasetsBooting&&design.sample)}<p role="status"><span class="source-spinner" aria-hidden="true"></span> Loading fields…</p>
+{:else if recordError}<p role="alert">{recordError}</p>
+{:else if recordInSource}
+<dl>{#each recordFields as [field,value]}<div class="record-field"><dt>{field}</dt><dd>{#if selectedFieldTypes[field]==='rawImage'}<img src={value} alt={field+' for '+selectedRecord.name}>{:else}<pre>{fieldText(value)}</pre>{/if}</dd></div>{/each}</dl>
+{:else}<p>Select a record in this dataset to inspect its fields.</p>{/if}
+</div>
+</section>
+</div>
 </div>
 {:else}
 <nav>{#each ['HTML','CSS','Context'] as t}<button class:active={tab===t} on:click={()=>tab=t}>{t}</button>{/each}</nav>

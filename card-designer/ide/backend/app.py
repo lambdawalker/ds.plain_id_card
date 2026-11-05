@@ -369,6 +369,26 @@ def samples(q: str = "", offset: int = Query(default=0, ge=0), source_id: int | 
     return list(islice(matches, offset, offset + 24))
 
 
+@app.get("/api/samples/{key}")
+def sample_details(key: str):
+    snapshot = catalog
+    record = snapshot["records"].get(key)
+    if record is None:
+        if dataset_loading:
+            raise HTTPException(503, "Datasets are still loading. Please wait.")
+        raise HTTPException(404, "Record unavailable. Choose another record.")
+    try:
+        kinds = snapshot["types"].get(key, {})
+        values = metadata(snapshot["fields"].get(key, {}), kinds)
+        for field, kind in kinds.items():
+            if kind == "rawImage" and field in record.get("images", {}):
+                values[field] = record["images"][field]
+        return {"record": record, "fields": values, "field_types": kinds}
+    except (OSError, ValueError) as exc:
+        logger.exception("Dataset record fields failed: record=%r: %s", key, exc)
+        raise HTTPException(422, f"Could not read fields for record {record.get('record_id', key)}: {exc}") from exc
+
+
 @app.get("/api/photos/{key}")
 def photo(key: str):
     snapshot = catalog

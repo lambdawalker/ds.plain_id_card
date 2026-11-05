@@ -162,6 +162,29 @@ class DatasetSourcesTest(unittest.TestCase):
         with patch.object(service, "load_loose_photos", side_effect=OSError("Drive unavailable")), self.assertLogs("uvicorn.error", level="ERROR"):
             asyncio.run(scenario())
 
+    def test_record_fields_keep_identity_separate_from_reserved_dataset_names(self):
+        root = self.dataset(fields=[{"name":"image","type":"rawImage","source":"img"},
+                                    {"name":"id","type":"rawImage","source":"img"},
+                                    {"name":"source_id","type":"str","source":"source"},
+                                    {"name":"images","type":"json","source":"other"}])
+        (root / "source").mkdir()
+        (root / "source/001.txt").write_text("Dataset source field")
+        (root / "other").mkdir()
+        (root / "other/001.json").write_text('{"extra":"Dataset image metadata"}')
+        sources = service.add_dataset(service.DatasetReference(reference=str(root)))
+        record = service.samples(offset=0, source_id=sources[0]["id"])[0]
+        details = service.sample_details(record["id"])
+        self.assertEqual(details["record"]["source_id"], sources[0]["id"])
+        self.assertEqual(details["fields"]["source_id"], "Dataset source field")
+        self.assertEqual(details["fields"]["images"], {"extra":"Dataset image metadata"})
+        self.assertEqual(details["fields"]["id"], record["images"]["id"])
+        self.assertEqual(details["field_types"]["id"], "rawImage")
+
+    def test_record_fields_report_missing_records(self):
+        with self.assertRaises(HTTPException) as error:
+            service.sample_details("unknown")
+        self.assertEqual(error.exception.status_code, 404)
+
     def test_other_dataset_id_and_optional_photo_sidecars(self):
         root = self.dataset()
         self.assertEqual(photo_index(root)["001"]["image"], root / "img/001.png")
@@ -228,6 +251,9 @@ class DatasetSourcesTest(unittest.TestCase):
         result = service.add_dataset(service.DatasetReference(reference=str(root)))
         record = service.samples(offset=0, source_id=result[0]["id"])[0]
         self.assertEqual(record["dataset"], "lambdaWalker/ds.machine_readable_code")
+        details = service.sample_details(record["id"])
+        self.assertEqual(details["fields"]["text"], "ABC123")
+        self.assertEqual(details["fields"]["payload"], {"format": "QR"})
         design = service.Design(name="test", template="{{ person.text }} {{ person.payload.format }}",
                                 css="", seed=1, color="#ffffff", background="plain", sample=record["id"])
         self.assertEqual(service.preview(service.Preview(design=design))["template"], "ABC123 QR")
