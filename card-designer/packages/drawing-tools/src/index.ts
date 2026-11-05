@@ -9,3 +9,6 @@ export { registry, groups } from "./draw/registry.ts";
 export { random } from "./random/seeded.ts";
 export { generateTheme } from "./draw/color/theme.ts";
 export type { Theme } from "./draw/color/theme.ts";
+
+export {fitHeader} from './draw/header/layout.ts';
+export type {HeaderBounds, HeaderLayout} from './draw/header/layout.ts';

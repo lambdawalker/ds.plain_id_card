@@ -74,3 +74,5 @@ invalid spacing. It uses software WebGL flags for CI. The ordinary unit test che
 recipe serialization and independence between layers.
 
 Country assets and the shader retain upstream attribution in THIRD_PARTY.md.
+
+`fitHeader(recipe, bounds, padding = 12)` returns a cloned recipe whose header layers cover a measured `{left, top, right, bottom}` region in logical card pixels. It compensates for curved/wavy edges and records `header_layout` metadata. The IDE calls it after rendering text and CSS, before painting the background; content is remeasured on each render. Other layer parameters remain unchanged. Passing `null` leaves layer geometry unchanged and clears old measurement metadata. Invalid/out-of-card measurements are rejected.

@@ -1,3 +1,4 @@
+import type {HeaderLayout} from '../header/layout.ts';
 import { random } from "../../random/seeded.ts";
 import { related } from "../color/index.ts";
 import { registry, groups } from "../registry.ts";
@@ -14,6 +15,7 @@ export interface Options {
 export interface Recipe extends Options {
   version: string;
   layers: Layer[];
+  header_layout?: HeaderLayout;
 }
 export function parameters(options: Options): Recipe {
   const { width, height, seed, color, family } = options;
