@@ -11,7 +11,7 @@ class TemplateCatalogTest(unittest.TestCase):
             self.assertGreater(item['height'], item['width']) if item['id'] in 'CD' else self.assertGreater(item['width'], item['height'])
             source = service.open_template(item['id'])
             self.assertNotIn('/ds/', source['template'])
-            self.assertIn('ds.image', source['template'])
+            self.assertIn('assets.', source['template'])
             self.assertIn('.card', source['css'])
             self.assertTrue(source['required_datasets'])
 

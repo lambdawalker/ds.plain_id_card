@@ -17,3 +17,7 @@ h1 { font-size: 1.6em; } h2 { font-size: 1.25em; } h3 { font-size: 1em; } h4 { f
 .data-group, .key-curp { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4mm; }
 .key-curp > div { min-width: 0; }
 .key-curp span, .key-voter span { font-family: monospace; font-size: .7em; }
+
+/* Keep secondary portraits within the primary portrait, including mirrored layouts. */
+.photo-section { position: relative; }
+.title-section > *, .data-item, .data-section { min-width: 0; overflow-wrap: anywhere; }

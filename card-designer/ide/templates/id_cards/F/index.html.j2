@@ -1,10 +1,12 @@
 <div class="card">
         <div>
+        <div class="barcode-rail">
             {% if gen.random.boolean() %}
-                <img class="barcode" src="{{ ds.image('lambdaWalker/ds.machine_readable_code', data.id, 'barcode') }}" data-class="barcode" alt="Barcode">
+                <img class="barcode" src="{{ assets.barcode }}" data-class="barcode" alt="Barcode">
             {% else %}
-                <img class="slim-barcode" src="{{ ds.image('lambdaWalker/ds.machine_readable_code', data.id, 'slim_barcode') }}" data-class="barcode" alt="slim-barcode">
+                <img class="slim-barcode" src="{{ assets.slim_barcode }}" data-class="barcode" alt="slim-barcode">
             {% endif %}
+        </div>
             <main>
                 {% if gen.random.boolean() %}
                     <h2>{{ gen.text.sentence((3,10)) }}</h2>
@@ -16,10 +18,10 @@
 
                 <div class="footer">
                     {%- if gen.random.boolean() %}
-                        <img class="pdf417" src="{{ ds.image('lambdaWalker/ds.machine_readable_code', data.id, 'pdf417') }}" data-class="pdf417" alt="PDF417">
+                        <img class="pdf417" src="{{ assets.pdf417 }}" data-class="pdf417" alt="PDF417">
                     {% else %}
                         {% for i in range([1,2] | random) %}
-                            <img class="qrcode" src="{{ ds.image('lambdaWalker/ds.machine_readable_code', data.id, 'qrcode') }}" data-class="qrcode" alt="qrcode">
+                            <img class="qrcode" src="{{ assets.qrcode }}" data-class="qrcode" alt="qrcode">
                         {% endfor %}
                     {% endif -%}
 

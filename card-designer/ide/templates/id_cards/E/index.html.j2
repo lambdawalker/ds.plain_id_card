@@ -1,7 +1,7 @@
 <div class="card">
         <header>
             <span class="small-text">{{ gen.text.sentence((3,6)) }}</span>
-            <img class="barcode" src="{{ ds.image('lambdaWalker/ds.machine_readable_code', data.id, 'slim_barcode') }}" data-class="barcode" alt="barcode">
+            <img class="barcode" src="{{ assets.slim_barcode }}" data-class="barcode" alt="barcode">
         </header>
 
         <main>
@@ -10,7 +10,7 @@
             {% endif %}
 
             <div class="photo-container">
-                <img class="photo" src="{{ ds.image('lambdaWalker/ds.machine_readable_code', data.id, 'pdf417') }}" data-class="pdf417" alt="pdf417">
+                <img class="photo" src="{{ assets.pdf417 }}" data-class="pdf417" alt="pdf417">
                 <div class="photo-text">
                     {% if gen.random.boolean() %}
                         {% for i in range([2, 3] | random) %}
@@ -29,7 +29,7 @@
                 <p class="mrz-text" data-class="mrz-text">{{ gen.random.mrz() | e }}</p>
             {% else %}
                 {% for i in range([1,2,3] | random) %}
-                    <img class="qrcode" src="{{ ds.image('lambdaWalker/ds.machine_readable_code', data.id, 'qrcode') }}" data-class="qrcode" alt="qrcode">
+                    <img class="qrcode" src="{{ assets.qrcode }}" data-class="qrcode" alt="qrcode">
                 {% endfor %}
             {% endif -%}
         </footer>
