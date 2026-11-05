@@ -7,15 +7,6 @@
   </header>
   <main class="card-body">
     <div class="photo-section">
-      <div class="small-photo-container">
-        <img
-          class="small-photo"
-          src="{{ assets.photo }}"
-          data-class="photo"
-          alt="Portrait"
-        />
-      </div>
-
       <img
         class="main-photo"
         src="{{ assets.photo }}"
@@ -24,6 +15,15 @@
       />
     </div>
     <div class="data-section">
+      <div class="small-photo-container">
+        <img
+          class="small-photo"
+          src="{{ assets.photo }}"
+          data-class="photo"
+          alt=""
+          aria-hidden="true"
+        />
+      </div>
       <div class="name-holder">
         <div class="data-item name">
           <label>NAME</label>

@@ -139,3 +139,5 @@ CARD_SERVER=http://127.0.0.1:8765 npm --prefix ../packages/drawing-tools run tes
 ```
 
 `CARD_CHROMIUM` selects an existing Chromium binary; `LAYOUT_SEEDS` changes the seed count and `LAYOUT_REPORT` optionally saves JSON findings. Run with configured datasets and without them to cover image assets and missing-data placeholders. The audit validates bounded content; custom template text and typography still need visual review.
+
+A Horizontal keeps a stable field order (name, birth/sex, address, document, personal/nationality, issue/expiry) while allowing the main portrait to switch sides. Its faint grayscale secondary portrait is an opposite-side watermark beneath all field text. The browser layout audit checks its position, opacity, stacking and reading order across seeds.
