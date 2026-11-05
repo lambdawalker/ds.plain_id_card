@@ -44,10 +44,33 @@
  }
  let inspector='Inspect',datasetRefs=[],reference='',sourceError='',sourceId=null,sourceRecords=[],sourceSearch='',sourceOffset=0,sourceImage='',sourceColumns=4;
  let sourceDialog,addError='',sourceBusy=false,sourceListLoading=true,sourceLoading=false,sourceSerial=0,datasetsBooting=true,sourcePoll,sourcesDisposed=false;
+ let datasetSplit,datasetGridSize=50,selectedField='';
  let selectedRecord=null,selectedFields={},selectedFieldTypes={},recordError='',recordLoading=false,recordSerial=0,recordKey;
  $: if(ready&&design.sample!==recordKey){recordKey=design.sample;loadRecord(design.sample)}
  $: recordInSource=selectedRecord?.source_id===sourceId&&selectedRecord!==null;
  $: recordFields=recordInSource?Object.entries(selectedFields):[];
+ $: if(recordInSource&&!recordLoading&&!Object.hasOwn(selectedFields,selectedField))selectedField=recordFields[0]?.[0]??'';
+ function fieldTabKey(e,index){
+   if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
+   e.preventDefault();
+   const next=e.key==='Home'?0:e.key==='End'?recordFields.length-1:(index+(e.key==='ArrowRight'?1:-1)+recordFields.length)%recordFields.length;
+   selectedField=recordFields[next][0];
+   const target=e.currentTarget.parentElement.querySelectorAll('[role=tab]')[next];
+   target.focus();target.scrollIntoView({block:'nearest',inline:'nearest'});
+ }
+ function resizeDataset(e){
+   if(e.button!==0)return;
+   const handle=e.currentTarget,bounds=datasetSplit.getBoundingClientRect();
+   handle.setPointerCapture(e.pointerId);
+   handle.onpointermove=event=>datasetGridSize=Math.max(15,Math.min(85,100*(event.clientY-bounds.top-4)/Math.max(1,bounds.height-8)));
+   const release=()=>{handle.onpointermove=null;handle.onpointerup=null;handle.onpointercancel=null;handle.onlostpointercapture=null};
+   handle.onpointerup=release;handle.onpointercancel=release;handle.onlostpointercapture=release;
+ }
+ function datasetResizeKey(e){
+   if(!['ArrowUp','ArrowDown','Home','End'].includes(e.key))return;
+   e.preventDefault();
+   datasetGridSize=e.key==='Home'?15:e.key==='End'?85:Math.max(15,Math.min(85,datasetGridSize+(e.key==='ArrowDown'?5:-5)));
+ }
  async function loadRecord(key){
    const current=++recordSerial;
    selectedRecord=null;selectedFields={};selectedFieldTypes={};recordError='';recordLoading=!!key;
@@ -334,18 +357,20 @@
 <div class="dataset-explorer" id={activeSource?'source-panel-'+activeSource.id:undefined} role={activeSource?'tabpanel':undefined} aria-labelledby={activeSource?'source-tab-'+activeSource.id:undefined} aria-busy={sourceListLoading||sourceLoading}>
 <div class="dataset-controls">
 {#if activeSource}
-<div class="dataset-summary"><button class="icon-button" title="Dataset settings" aria-label="Dataset settings" aria-haspopup="dialog" aria-controls="dataset-settings" aria-expanded={datasetSettingsOpen} on:click={toggleDatasetSettings}><Icon name="settings"/></button><small>{activeSource.count} records</small></div>
+
 <div id="dataset-settings" class="background-settings dataset-settings" popover="auto" role="dialog" aria-labelledby="dataset-settings-title" bind:this={datasetSettingsPanel} on:toggle={e=>datasetSettingsOpen=e.newState==='open'} style={'top:'+datasetSettingsTop+'px;left:'+datasetSettingsLeft+'px;max-height:calc(100dvh - '+(datasetSettingsTop+12)+'px)'}>
 <div class="settings-heading"><h2 id="dataset-settings-title">Dataset settings</h2><button class="icon-button" title="Close dataset settings" aria-label="Close dataset settings" on:click={()=>datasetSettingsPanel.hidePopover()}><Icon name="close"/></button></div>
+<p class="dataset-count">{activeSource.count} records</p>
+<div class="source-display-controls"><label>Display image<select aria-label="Display image" bind:value={sourceImage}><option value="">Default image</option>{#each sourceImageFields as field}<option value={field}>{field}</option>{/each}</select></label><label>Columns<select aria-label="Dataset columns" bind:value={sourceColumns}>{#each Array.from({length:8},(_,i)=>i+1) as columns}<option value={columns}>{columns}</option>{/each}</select></label></div>
 <button disabled={sourceBusy||datasetsBooting} on:click={()=>{datasetSettingsPanel.hidePopover();removeSource(activeSource.id)}}>Remove reference</button>
 </div>
 {#if activeSource.error}<p role="alert">{activeSource.error}</p>{/if}
-<form class="source-search" on:submit|preventDefault={()=>browseSource()}><input aria-label="Search source records" placeholder="Search records…" bind:value={sourceSearch}><button>Search</button></form>
-<div class="source-display-controls"><label>Display image<select aria-label="Display image" bind:value={sourceImage}><option value="">Default image</option>{#each sourceImageFields as field}<option value={field}>{field}</option>{/each}</select></label><label>Columns<select aria-label="Dataset columns" bind:value={sourceColumns}>{#each Array.from({length:8},(_,i)=>i+1) as columns}<option value={columns}>{columns}</option>{/each}</select></label></div>
+<form class="source-search" on:submit|preventDefault={()=>browseSource()}><button type="button" class="icon-button" title="Dataset settings" aria-label="Dataset settings" aria-haspopup="dialog" aria-controls="dataset-settings" aria-expanded={datasetSettingsOpen} on:click={toggleDatasetSettings}><Icon name="settings"/></button><input aria-label="Search source records" placeholder="Search records…" bind:value={sourceSearch}><button>Search</button></form>
+
 {/if}
 {#if sourceError}<p role="alert">{sourceError}</p>{/if}
 </div>
-<div class="dataset-split">
+<div class="dataset-split" bind:this={datasetSplit} style={'grid-template-rows:minmax(0,'+datasetGridSize+'fr) 8px minmax(0,'+(100-datasetGridSize)+'fr)'}>
 <div class="dataset-grid-pane" aria-label="Dataset records">
 {#if sourceListLoading}<p id="sources-loading-panel" role="status"><span class="source-spinner" aria-hidden="true"></span> Loading datasets…</p>
 {:else if !activeSource}<p>No dataset references. Use + to add a dataset.</p>
@@ -358,13 +383,20 @@
 <div class="source-pagination"><button disabled={sourceLoading||!sourceOffset} on:click={()=>browseSource(sourceOffset-24)}>Previous</button><button disabled={sourceLoading||sourceRecords.length<24} on:click={()=>browseSource(sourceOffset+24)}>Next</button></div>
 {/if}
 </div>
+<button class="grip row-grip dataset-divider" aria-label="Resize dataset grid and record fields" role="separator" aria-orientation="horizontal" aria-valuenow={Math.round(datasetGridSize)} aria-valuemin="15" aria-valuemax="85" on:pointerdown={resizeDataset} on:keydown={datasetResizeKey}></button>
 <section class="dataset-fields-pane" aria-labelledby="record-fields-title" aria-busy={recordLoading}>
 <h3 id="record-fields-title">Record fields {#if recordInSource}<small>{selectedRecord.name}</small>{/if}</h3>
+{#if recordInSource&&!recordLoading}
+<nav class="record-field-tabs" role="tablist" aria-label="Record fields">{#each recordFields as [field,value],index}<button id={'record-field-tab-'+index} role="tab" aria-selected={selectedField===field} aria-controls="record-field-panel" tabindex={selectedField===field?0:-1} class:active={selectedField===field} on:click={()=>selectedField=field} on:keydown={e=>fieldTabKey(e,index)}>{field}</button>{/each}</nav>
+{/if}
 <div class="record-fields-scroll">
 {#if recordLoading||(datasetsBooting&&design.sample)}<p role="status"><span class="source-spinner" aria-hidden="true"></span> Loading fields…</p>
 {:else if recordError}<p role="alert">{recordError}</p>
-{:else if recordInSource}
-<dl>{#each recordFields as [field,value]}<div class="record-field"><dt>{field}</dt><dd>{#if selectedFieldTypes[field]==='rawImage'}<img src={value} alt={field+' for '+selectedRecord.name}>{:else}<pre>{fieldText(value)}</pre>{/if}</dd></div>{/each}</dl>
+{:else if recordInSource&&recordFields.length}
+<div class="record-field-panel" id="record-field-panel" role="tabpanel" tabindex="0" aria-labelledby={'record-field-tab-'+recordFields.findIndex(([field])=>field===selectedField)}>
+{#if selectedFieldTypes[selectedField]==='rawImage'}<img src={selectedFields[selectedField]} alt={selectedField+' for '+selectedRecord.name}>{:else}<pre>{fieldText(selectedFields[selectedField])}</pre>{/if}
+</div>
+{:else if recordInSource}<p>No fields available for this record.</p>
 {:else}<p>Select a record in this dataset to inspect its fields.</p>{/if}
 </div>
 </section>
