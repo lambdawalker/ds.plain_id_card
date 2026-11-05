@@ -52,6 +52,55 @@ class RenderContextTests(unittest.TestCase):
         self.assertIn('DATE OF BIRTH', html)
         self.assertNotIn('gen.', template_source('A')['template'])
 
+    def test_nested_photo_card_supplies_identity_when_no_sample_is_selected(self):
+        snapshot = self.snapshot()
+        key = 'lambdaWalker/ds.photo_id:photo-b'
+        card = {'person':{'name':{'first':'Mei','middle':'Ling','last':'Chen','suffix':''},
+                'birth':{'date':'2000-10-27'},'demographics':{'gender':'Female','nationality':'Chinese'}},
+                'contact':{'address':{'line1':'14 Galaxy Lane','line2':'Suite 700','city':'New York City','state':'NY','postal_code':'10001','country':'USA'}},
+                'physical':{'height':168},
+                'document':{'type':"Driver's License",'number':'DL-789456123','issuing_authority':'New York DMV','issued':'2026-01-15','expires':'2029-01-15'}}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'card.json'
+            path.write_text(json.dumps(card))
+            snapshot['fields'][key] = {'card':path}
+            snapshot['types'][key] = {'card':'json'}
+            context, summary = build_context(snapshot, {'seed':1}, {}, random.Random(1))
+            identity = context['identity']
+            self.assertEqual(identity['given_names'], 'Mei Ling')
+            self.assertEqual(identity['family_name'], 'Chen')
+            self.assertEqual(identity['birth_date'], '2000-10-27')
+            self.assertEqual(identity['sex'], 'Female')
+            self.assertEqual(identity['nationality'], 'Chinese')
+            self.assertEqual(identity['address_line2'], 'Suite 700, New York City, NY, 10001, USA')
+            self.assertEqual(identity['document_number'], 'DL-789456123')
+            self.assertEqual(identity['issue_date'], '2026-01-15')
+            self.assertEqual(identity['expiry_date'], '2029-01-15')
+            self.assertEqual(context['card']['physical']['height'], 168)
+            self.assertEqual(summary['identity_source']['record_id'], 'photo-b')
+            self.assertEqual(summary['identity_source']['kind'], 'aligned_photo')
+            self.assertEqual(summary['selection']['mode'], 'seed_fallback')
+            self.assertEqual(context['person'], {})
+            self.assertEqual(summary['data']['id'], '1')
+            from backend.template_catalog import template_source
+            html = SandboxedEnvironment(undefined=StrictUndefined, autoescape=True).from_string(template_source('A')['template']).render(**context)
+            self.assertIn('Mei Ling', html)
+            self.assertIn('New York DMV', html)
+            self.assertIn('DL-789456123', html)
+            selected = {**snapshot['records'][key], 'first_name':'Other person'}
+            selected_context, _ = build_context(snapshot, {'seed':1}, selected, random.Random(1))
+            self.assertEqual(selected_context['identity']['given_names'], 'Other person')
+            self.assertEqual(selected_context['identity']['birth_date'], '')
+
+    def test_numeric_record_ids_use_natural_indices(self):
+        snapshot = self.snapshot()
+        snapshot['records'] = {stem:dict(id=stem,record_id=stem,dataset='numbers',images={}) for stem in ['1','10','2','42']}
+        person = snapshot['records']['42']
+        context, summary = build_context(snapshot, {'seed':0}, person, random.Random(0))
+        self.assertEqual(context['data']['index'], 3)
+        self.assertEqual(context['ds'].record('numbers', 1)['id'], '2')
+        self.assertEqual(summary['datasets']['numbers']['records']['42']['index'], 3)
+
     def test_selected_identity_and_cross_source_exact_stem(self):
         context, summary = self.context()
         self.assertEqual(context['data']['id'], 'photo-b')

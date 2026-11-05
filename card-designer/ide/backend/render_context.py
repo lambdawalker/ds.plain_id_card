@@ -139,7 +139,7 @@ class DatasetHandler:
             if record.get('dataset'):
                 self.groups.setdefault(record['dataset'], []).append(record)
         for rows in self.groups.values():
-            rows.sort(key=lambda row: str(row.get('record_id', row['id'])))
+            rows.sort(key=record_order)
         self.cache = {}
 
     def resolve(self, dataset):
@@ -206,45 +206,57 @@ class DatasetHandler:
 
 
 def identity_fields(person):
-    """Normalize common structured metadata names without inventing identity values."""
-    card = person.get('card', {})
-    card = card if isinstance(card, dict) else {}
-    profile = card.get('person', card.get('identity', card))
-    profile = profile if isinstance(profile, dict) else {}
-    nested = person.get('person', person.get('identity', {}))
-    nested = nested if isinstance(nested, dict) else {}
+    """Normalize structured card metadata, preserving missing values as empty strings."""
+    def mapping(value):
+        return value if isinstance(value, dict) else {}
+    def scalar(value):
+        return str(value).strip() if isinstance(value, (str, int, float)) and not isinstance(value, bool) else ''
+    card = mapping(person.get('card'))
+    profile = mapping(card.get('person', card.get('identity', card)))
+    nested = mapping(person.get('person', person.get('identity')))
     sources = [profile, card, nested, person]
     def value(*keys):
-        for source in sources:
-            for key in keys:
-                item = source.get(key)
-                if isinstance(item, (str, int, float)) and not isinstance(item, bool) and str(item).strip():
-                    return str(item).strip()
-        return ''
-    given = value('given_names', 'given_name', 'first_name')
-    middle = value('middle_name', 'middle_names')
-    family = value('family_name', 'last_name', 'surname', 'surnames')
-    # A catalog record's top-level name is its filename, not a person's name.
-    full = value('full_name', 'display_name') or next((str(source['name']) for source in sources[:-1] if isinstance(source.get('name'), str)), '')
-    address = next((source.get('address') for source in sources if source.get('address')), {})
+        return next((scalar(source.get(key)) for source in sources for key in keys if scalar(source.get(key))), '')
+    name = next((mapping(source.get('name')) for source in sources if isinstance(source.get('name'), dict)), {})
+    given = scalar(name.get('first')) or value('given_names', 'given_name', 'first_name')
+    middle = scalar(name.get('middle')) or value('middle_name', 'middle_names')
+    family = scalar(name.get('last')) or value('family_name', 'last_name', 'surname', 'surnames')
+    suffix = scalar(name.get('suffix')) or value('suffix')
+    full = value('full_name', 'display_name') or next((scalar(source.get('name')) for source in sources[:-1] if scalar(source.get('name'))), '')
+    birth = next((mapping(source.get('birth')) for source in sources if isinstance(source.get('birth'), dict)), {})
+    demographics = next((mapping(source.get('demographics')) for source in sources if isinstance(source.get('demographics'), dict)), {})
+    document = next((mapping(source.get('document')) for source in sources if isinstance(source.get('document'), dict)), {})
+    contact = mapping(card.get('contact')) or mapping(person.get('contact'))
+    address = contact.get('address') or next((source.get('address') for source in sources if source.get('address')), {})
     if isinstance(address, str):
         line1, line2 = address, ''
     else:
-        address = address if isinstance(address, dict) else {}
+        address = mapping(address)
         def part(*keys):
-            return next((str(address[key]) for key in keys if isinstance(address.get(key), (str, int)) and str(address[key]).strip()), '')
+            return next((scalar(address.get(key)) for key in keys if scalar(address.get(key))), '')
         line1 = part('line1', 'address_line1', 'street_address') or ' '.join(filter(None, [part('number', 'house_number'), part('street', 'street_name')]))
-        line2 = part('line2', 'address_line2') or ', '.join(filter(None, [part('city', 'locality'), part('state', 'region'), part('postal_code', 'zip_code')]))
+        locality = ', '.join(filter(None, [part('city', 'locality'), part('state', 'region'), part('postal_code', 'zip_code'), part('country')]))
+        line2 = ', '.join(filter(None, [part('line2', 'address_line2'), locality]))
     return {'given_names': ' '.join(filter(None, [given, middle])) or full or family,
-            'family_name': family if given else '', 'full_name': full or ' '.join(filter(None, [given, middle, family])),
-            'birth_date': value('date_of_birth', 'birth_date', 'dob'), 'sex': value('sex', 'gender'),
+            'family_name': ' '.join(filter(None, [family, suffix])) if given else '',
+            'full_name': full or ' '.join(filter(None, [given, middle, family, suffix])),
+            'birth_date': scalar(birth.get('date')) or value('date_of_birth', 'birth_date', 'dob'),
+            'sex': scalar(demographics.get('gender')) or scalar(demographics.get('sex')) or value('sex', 'gender'),
             'address_line1': line1 or value('address_line1', 'street_address'),
             'address_line2': line2 or value('address_line2'),
-            'document_number': value('document_number', 'document_no', 'id_number'),
+            'document_number': scalar(document.get('number')) or value('document_number', 'document_no', 'id_number'),
+            'document_type': scalar(document.get('type')) or value('document_type'),
+            'issuing_authority': scalar(document.get('issuing_authority')) or value('issuing_authority'),
             'personal_number': value('personal_number', 'personal_no', 'curp'),
-            'nationality': value('nationality', 'country'),
-            'issue_date': value('issue_date', 'date_of_issue'),
-            'expiry_date': value('expiry_date', 'expiration_date', 'date_of_expiry')}
+            'nationality': scalar(demographics.get('nationality')) or value('nationality', 'country'),
+            'issue_date': scalar(document.get('issued')) or value('issue_date', 'date_of_issue'),
+            'expiry_date': scalar(document.get('expires')) or value('expiry_date', 'expiration_date', 'date_of_expiry')}
+
+
+def record_order(record):
+    """Natural record order: numeric IDs sort 2, 10, 42 rather than 10, 2, 42."""
+    return tuple((0, int(part)) if part.isdigit() else (1, part.casefold())
+                 for part in re.split(r'(\d+)', str(record.get('record_id', record['id']))))
 
 
 def build_context(snapshot, design, person, rng):
@@ -258,7 +270,7 @@ def build_context(snapshot, design, person, rng):
     person = dict(person or {})
     selected = snapshot.get('records', {}).get(person.get('id'), person)
     rows = sorted((r for r in snapshot.get('records', {}).values() if r.get('dataset') == selected.get('dataset')),
-                  key=lambda row: str(row.get('record_id', row['id'])))
+                  key=record_order)
     ordinal = next((i for i, row in enumerate(rows) if row['id'] == person.get('id')), seed)
     data = {**person, 'id': person.get('record_id', person.get('name', str(seed))), 'index': ordinal}
     color = get('color', '#000000')
@@ -272,10 +284,26 @@ def build_context(snapshot, design, person, rng):
     # Publish one aligned real record per source, including metadata and image URLs.
     for dataset in ds.groups:
         ds.record(dataset, person.get('record_id', str(seed)))
+    # Use one complete identity source. Never combine fields from unrelated people.
+    primary = person
+    origin = 'selected' if person else 'none'
+    if not any(identity.values()):
+        photo_dataset = ds.resolve('lambdaWalker/ds.photo_id')
+        if ds.rows(photo_dataset):
+            primary = ds.record(photo_dataset, person.get('record_id', str(seed)))
+            identity = identity_fields(primary)
+            origin = 'aligned_photo'
+    card = primary.get('card', {})
+    card = card if isinstance(card, dict) else {}
+    identity_source = {'kind': origin, 'dataset': primary.get('dataset'),
+                       'record_id': primary.get('record_id'), 'index': primary.get('index', ordinal) if primary else None}
+    summary.update(identity=identity, card=card, identity_source=identity_source,
+                   selection={'sample_id': person.get('id'), 'record_id': person.get('record_id'),
+                              'dataset': person.get('dataset'), 'mode': 'selected' if person else 'seed_fallback'})
     text = TextGenerator(rng)
     gen = SimpleNamespace(text=text, random=RandomGenerator(rng), time=TimeGenerator(rng),
                           address=AddressGenerator(rng, text, person))
-    context = {'person': person, 'identity': identity, 'data': data, 'seed': seed, 'common': summary['common'],
+    context = {'person': person, 'identity': identity, 'card': card, 'identity_source': identity_source, 'data': data, 'seed': seed, 'common': summary['common'],
                'env': SimpleNamespace(theme=SimpleNamespace(primary_color=Color(color), text_color=Color(text_color))),
                'gen': gen, 'ds': ds}
     return context, summary
