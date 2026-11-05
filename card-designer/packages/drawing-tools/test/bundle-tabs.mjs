@@ -34,13 +34,16 @@ try {
     .getByRole("button", { name: "Open templates", exact: true })
     .click();
   const gallery = page.getByRole("dialog", {
-      name: "Open a template",
+      name: "Open a bundle",
       exact: true,
     }),
     stack = gallery.getByRole("button", {
-      name: "Open Horizontal identity card bundle preview",
+      name: "Open bundle Horizontal identity card",
       exact: true,
     });
+  await gallery.locator(".bundle-choice").nth(6).waitFor();
+  assert.equal(await gallery.locator(".bundle-choice").count(), 7);
+  assert.equal(await gallery.locator(".template-card,.open-bundle").count(), 0);
   await stack.locator("iframe").nth(1).waitFor();
   const cards = await stack.locator(".stack-card").all();
   assert.equal(cards.length, 2);
@@ -48,6 +51,7 @@ try {
     b = await cards[1].boundingBox();
   assert.ok(a.x + a.width > b.x);
   assert.ok(Math.abs(a.x - b.x) > 5);
+  if(process.env.GALLERY_SCREENSHOT)await page.screenshot({path:process.env.GALLERY_SCREENSHOT});
   await stack.click();
   await gallery.waitFor({ state: "hidden" });
   const tabs = page.getByRole("tablist", { name: "Card layouts", exact: true });
@@ -189,6 +193,18 @@ try {
     await tabs.getByRole("tab").last().getAttribute("aria-selected"),
     "true",
   );
+  await page
+    .getByRole("button", { name: "Open templates", exact: true })
+    .click();
+  const mobileCard = gallery.locator(".bundle-choice").first();
+  await mobileCard.waitFor();
+  const bounds = await mobileCard.boundingBox();
+  assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390);
+  assert.equal(await gallery.locator(".bundle-choice").count(), 7);
+  assert.ok(
+    await gallery.evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+  );
+  if(process.env.GALLERY_SCREENSHOT)await page.screenshot({path:process.env.GALLERY_SCREENSHOT+'.mobile.png'});
   assert.deepEqual(errors, []);
   console.log(
     "PASS: stacked overlapping bundle previews, opening all layouts as tabs, independent source edits/save IDs, aggregate unsaved protection, portrait tab dimensions, serialized Save/bundle actions, mobile keyboard tabs.",

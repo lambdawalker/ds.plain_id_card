@@ -309,19 +309,6 @@
    finally{if(current===templateSerial)templatesLoading=false}
  }
  function closeTemplates(){templateSerial++;templateDialog.close()}
- async function selectTemplate(item){
-   if(templateOpening||busy)return;
-   templateOpening=item.id;
-   try{
-     if(!await canLeave())return;
-     randomSerial++;randomizing=false;
-     const source=item.source||await api('templates/'+encodeURIComponent(item.id));
-     const settings=currentSettings();
-     id=null;saved=JSON.stringify(starter);design={...starter,...source,...settings};notice='';
-     closeTemplates();
-   }catch(e){templates=templates.map(entry=>entry.id===item.id?{...entry,state:'error',error:e.message}:entry)}
-   finally{templateOpening=null}
- }
  async function newDesign(){
    if(!await canLeave())return;
    const name=await askAction('name','New design','Choose a name for your new card.','Create design','Untitled card');
@@ -496,26 +483,20 @@
 </dialog>
 
 <dialog class="template-dialog" bind:this={templateDialog} aria-labelledby="template-dialog-title" aria-describedby="template-dialog-help" on:cancel={e=>{if(templateOpening){e.preventDefault();return}templateSerial++}}>
-<div class="template-dialog-header"><div><h2 id="template-dialog-title">Open a template</h2><p id="template-dialog-help">Choose a bundle and an explicit layout. The seed varies spacing and typography without changing the layout.</p></div><button class="icon-button" title="Close templates" aria-label="Close templates" disabled={busy||!!templateOpening} on:click={closeTemplates}><Icon name="close"/></button></div>
+<div class="template-dialog-header"><div><h2 id="template-dialog-title">Open a bundle</h2><p id="template-dialog-help">Choose a bundle to open its layouts in preview tabs.</p></div><button class="icon-button" title="Close templates" aria-label="Close templates" disabled={busy||!!templateOpening} on:click={closeTemplates}><Icon name="close"/></button></div>
 {#if templatesLoading}<p class="gallery-status" role="status"><span class="source-spinner" aria-hidden="true"></span> Loading templates…</p>
 {:else if templatesError}<div class="gallery-status" role="alert"><p>{templatesError}</p><button on:click={showTemplates}>Try again</button></div>
 {:else if !templates.length}<p class="gallery-status">No templates available.</p>
-{:else}{#each templateBundles as bundle (bundle.id)}
-<section class="template-bundle" aria-labelledby={'bundle-'+bundle.id}><div class="bundle-heading"><h3 id={'bundle-'+bundle.id}>{bundle.name}</h3><p>{bundle.description}</p><button class="open-bundle" disabled={busy||!!templateOpening} on:click={()=>openBundle(bundle)} aria-label={'Open bundle '+bundle.name}>Open bundle · {bundle.templates.length} tabs</button>
-<button class="bundle-stack" disabled={busy||!!templateOpening} on:click={()=>openBundle(bundle)} aria-label={'Open '+bundle.name+' bundle preview'}>
-{#each templates.filter(item=>item.bundle_id===bundle.id).slice(0,3) as item,index (item.id)}<span class="stack-card" aria-hidden="true" style={'width:'+item.width*Math.min(180/item.width,120/item.height)+'px;height:'+item.height*Math.min(180/item.width,120/item.height)+'px;left:'+(12+index*18)+'px;top:'+(10+index*10)+'px;z-index:'+(index+1)+';transform:rotate('+((index-1)*4)+'deg)'}>{#if item.state==='ready'}<iframe title={'Bundle preview '+item.id} sandbox="" tabindex="-1" srcdoc={item.html} style={'width:'+item.width+'px;height:'+item.height+'px;transform:scale('+Math.min(180/item.width,120/item.height)+')'}></iframe>{:else}<span class="source-spinner"></span>{/if}</span>{/each}<span class="stack-count">{bundle.templates.length} layouts</span></button></div>
-<div class="template-grid">
-{#each templates.filter(item=>item.bundle_id===bundle.id) as item (item.id)}
-<button class="template-card" disabled={busy||!!templateOpening} on:click={()=>selectTemplate(item)} aria-label={'Open '+item.name}>
-<div class="template-thumbnail">
-{#if item.state==='ready'}<div class="thumbnail-frame" style={'width:'+item.width*(Math.min(220/item.width,180/item.height))+'px;height:'+item.height*(Math.min(220/item.width,180/item.height))+'px'}><iframe title={'Preview template '+item.id} sandbox="" tabindex="-1" srcdoc={item.html} style={'width:'+item.width+'px;height:'+item.height+'px;transform:scale('+Math.min(220/item.width,180/item.height)+')'}></iframe></div>
-{:else if item.state==='loading'}<span role="status"><span class="source-spinner" aria-hidden="true"></span> Rendering preview…</span>
-{:else}<span class="template-preview-error">Preview unavailable<span>{item.error}</span></span>{/if}
-</div>
-<div class="template-card-copy"><strong>{item.name}</strong><small>{item.kind} · {item.width} × {item.height}</small><p>{item.description}</p>{#if item.required_datasets?.length}<span class="template-requirements">Uses {item.required_datasets.join(', ')}</span>{/if}<span class="template-open-label">{templateOpening===item.id?'Opening…':'Open template '+item.id+' →'}</span></div>
-</button>
-{/each}
-</div></section>{/each}{/if}
+{:else}<div class="bundle-gallery">{#each templateBundles as bundle (bundle.id)}
+<button class="bundle-choice" disabled={busy||!!templateOpening} on:click={()=>openBundle(bundle)} aria-label={'Open bundle '+bundle.name} aria-describedby={'bundle-count-'+bundle.id}>
+<span class="bundle-stack" aria-hidden="true">
+{#each templates.filter(item=>item.bundle_id===bundle.id).slice(0,3) as item,index (item.id)}
+<span class="stack-card" style={'width:'+item.width*Math.min(200/item.width,150/item.height)+'px;height:'+item.height*Math.min(200/item.width,150/item.height)+'px;left:calc(50% - '+(item.width*Math.min(200/item.width,150/item.height)/2+(Math.min(3,bundle.templates.length)-1)*9)+'px + '+index*18+'px);top:'+((200-item.height*Math.min(200/item.width,150/item.height)-(Math.min(3,bundle.templates.length)-1)*10)/2+index*10)+'px;z-index:'+(index+1)+';transform:rotate('+((index-1)*4)+'deg)'}>
+{#if item.state==='ready'}<iframe title={'Bundle preview '+item.id} sandbox="" tabindex="-1" srcdoc={item.html} style={'width:'+item.width+'px;height:'+item.height+'px;transform:scale('+Math.min(200/item.width,150/item.height)+')'}></iframe>{:else}<span class="source-spinner"></span>{/if}
+</span>{/each}
+</span>
+<span class="bundle-copy"><strong>{bundle.name}</strong><span class="bundle-count" id={'bundle-count-'+bundle.id}>{bundle.templates.length} {bundle.templates.length===1?'template':'templates'}</span></span>
+</button>{/each}</div>{/if}
 </dialog>
 
 <dialog class="action-dialog" bind:this={actionDialog} aria-labelledby="action-title" aria-describedby="action-message" on:cancel={e=>{e.preventDefault();finishAction()}}>
