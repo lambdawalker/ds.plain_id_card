@@ -93,8 +93,8 @@ class TemplateBundleTest(unittest.TestCase):
             self.assertLessEqual(low,parameters[key])
             self.assertLessEqual(parameters[key],high)
 
-    def test_horizontal_font_replays_and_is_embedded_only_in_current_layouts(self):
-        for key in ('A-left', 'A-right'):
+    def test_font_replays_and_is_embedded_only_in_current_layouts(self):
+        for key in TEMPLATE_IDS:
             with self.subTest(template=key):
                 source = service.open_template(key)
                 designs = [service.Design(**source, seed=seed, color='#ffffff', background='plain')
@@ -114,6 +114,3 @@ class TemplateBundleTest(unittest.TestCase):
                 self.assertGreater(len(families), 1)
                 legacy = designs[0].model_copy(update={'variation_version': 2})
                 self.assertNotIn('@font-face', service.preview(service.Preview(design=legacy))['css'])
-        source = service.open_template('B-left')
-        design = service.Design(**source, seed=0, color='#ffffff', background='plain')
-        self.assertNotIn('@font-face', service.preview(service.Preview(design=design))['css'])
