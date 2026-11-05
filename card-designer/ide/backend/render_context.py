@@ -236,6 +236,12 @@ def identity_fields(person):
     demographics = next((mapping(source.get('demographics')) for source in sources if isinstance(source.get('demographics'), dict)), {})
     document = next((mapping(source.get('document')) for source in sources if isinstance(source.get('document'), dict)), {})
     contact = mapping(card.get('contact')) or mapping(person.get('contact'))
+    physical = mapping(card.get('physical'))
+    units = mapping(mapping(card.get('system')).get('units'))
+    def measurement(key):
+        amount = scalar(physical.get(key))
+        unit = scalar(units.get(key))
+        return ' '.join(filter(None,[amount,unit])) if amount else ''
     address = contact.get('address') or next((source.get('address') for source in sources if source.get('address')), {})
     if isinstance(address, str):
         line1, line2 = address, ''
@@ -259,7 +265,12 @@ def identity_fields(person):
             'personal_number': value('personal_number', 'personal_no', 'curp'),
             'nationality': scalar(demographics.get('nationality')) or value('nationality', 'country'),
             'issue_date': scalar(document.get('issued')) or value('issue_date', 'date_of_issue'),
-            'expiry_date': scalar(document.get('expires')) or value('expiry_date', 'expiration_date', 'date_of_expiry')}
+            'expiry_date': scalar(document.get('expires')) or value('expiry_date', 'expiration_date', 'date_of_expiry'),
+            'email': scalar(contact.get('email')) or value('email'),
+            'phone_number': scalar(contact.get('phone_number')) or value('phone_number'),
+            'height': measurement('height'), 'weight': measurement('weight'),
+            'eye_color': scalar(physical.get('eye_color')), 'hair_color': scalar(physical.get('hair_color')),
+            'blood_type': scalar(physical.get('blood_type')), 'mrz': scalar(document.get('mrz'))}
 
 
 def record_order(record):

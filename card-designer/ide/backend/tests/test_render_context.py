@@ -59,7 +59,8 @@ class RenderContextTests(unittest.TestCase):
         card = {'person':{'name':{'first':'Mei','middle':'Ling','last':'Chen','suffix':''},
                 'birth':{'date':'2000-10-27'},'demographics':{'gender':'Female','nationality':'Chinese'}},
                 'contact':{'address':{'line1':'14 Galaxy Lane','line2':'Suite 700','city':'New York City','state':'NY','postal_code':'10001','country':'USA'}},
-                'physical':{'height':168},
+                'physical':{'height':168,'eye_color':'Brown','blood_type':'O+'},
+                'system':{'units':{'height':'cm'}},
                 'document':{'type':"Driver's License",'number':'DL-789456123','issuing_authority':'New York DMV','issued':'2026-01-15','expires':'2029-01-15'}}
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'card.json'
@@ -78,6 +79,10 @@ class RenderContextTests(unittest.TestCase):
             self.assertEqual(identity['issue_date'], '2026-01-15')
             self.assertEqual(identity['expiry_date'], '2029-01-15')
             self.assertEqual(context['card']['physical']['height'], 168)
+            self.assertEqual(identity['height'], '168 cm')
+            self.assertEqual(identity['eye_color'], 'Brown')
+            self.assertEqual(identity['blood_type'], 'O+')
+            self.assertEqual(identity['mrz'], '')
             self.assertEqual(summary['identity_source']['record_id'], 'photo-b')
             self.assertEqual(summary['identity_source']['kind'], 'aligned_photo')
             self.assertEqual(summary['selection']['mode'], 'seed_fallback')

@@ -1,36 +1,68 @@
-<div class="card">
-        <header>
-            <span class="small-text">{{ gen.text.sentence((3,6)) }}</span>
-            <img class="barcode" src="{{ assets.slim_barcode }}" data-class="barcode" alt="barcode">
-        </header>
-
-        <main>
-            {% if gen.random.boolean() %}
-                <p class="small-text">{{ gen.text.sentence((3,7)) }}</p>
-            {% endif %}
-
-            <div class="photo-container">
-                <img class="photo" src="{{ assets.pdf417 }}" data-class="pdf417" alt="pdf417">
-                <div class="photo-text">
-                    {% if gen.random.boolean() %}
-                        {% for i in range([2, 3] | random) %}
-                            <p class="small-text">{{ gen.text.sentence((6,10)) }}</p>
-                        {% endfor %}
-                    {% endif %}
-                </div>
-            </div>
-        </main>
-        <p class="sep-line">
-            <span class="embedded">{{ gen.text.word((1,2)) }}</span>
-            {{ gen.text.sentence((6,8)) }}
-        </p>
-        <footer>
-            {%- if gen.random.boolean() %}
-                <p class="mrz-text" data-class="mrz-text">{{ gen.random.mrz() | e }}</p>
-            {% else %}
-                {% for i in range([1,2,3] | random) %}
-                    <img class="qrcode" src="{{ assets.qrcode }}" data-class="qrcode" alt="qrcode">
-                {% endfor %}
-            {% endif -%}
-        </footer>
+<div class="card bundle-card">
+  <header class="card-header">
+    <div class="title-section">
+      <h1>{{ common.get('card_title') or identity.document_type or 'IDENTITY CARD' }}</h1>
+      <h2>{{ common.get('issuer') or identity.issuing_authority or 'SPECIMEN' }}</h2>
     </div>
+  </header>
+  <main class="back-body">
+    <div class="code-panel">
+      <img
+        class="pdf417 code-image"
+        src="{{ assets.pdf417 }}"
+        data-class="pdf417"
+        alt="PDF417"
+      /><img
+        class="qrcode code-image"
+        src="{{ assets.qrcode }}"
+        data-class="qrcode"
+        alt="QR code"
+      />
+    </div>
+    <div class="back-details field-grid">
+      <div class="data-item name full">
+        <label>NAME</label>
+        <p>{{ identity.full_name or '—' }}</p>
+      </div>
+      <div class="data-item ">
+        <label>DOCUMENT NUMBER</label>
+        <p>{{ identity.document_number or '—' }}</p>
+      </div>
+      <div class="data-item ">
+        <label>NATIONALITY</label>
+        <p>{{ identity.nationality or '—' }}</p>
+      </div>
+      <div class="data-item address full">
+        <label>ADDRESS</label>
+        <p>{{ identity.address_line1 or '—' }}</p>
+        {% if identity.address_line2 %}
+        <p>{{ identity.address_line2 }}</p>
+        {% endif %}
+      </div>
+      <div class="data-item ">
+        <label>EMAIL</label>
+        <p>{{ identity.email or '—' }}</p>
+      </div>
+      <div class="data-item ">
+        <label>PHONE</label>
+        <p>{{ identity.phone_number or '—' }}</p>
+      </div>
+    </div>
+  </main>
+  <div class="dates full">
+    <div class="data-item issued">
+      <label>ISSUED</label>
+      <p>{{ identity.issue_date or '—' }}</p>
+    </div>
+    <div class="data-item expires">
+      <label>EXPIRES</label>
+      <p>{{ identity.expiry_date or '—' }}</p>
+    </div>
+  </div>
+  <img
+    class="slim-barcode code-image"
+    src="{{ assets.slim_barcode }}"
+    data-class="barcode"
+    alt="Barcode"
+  />
+</div>

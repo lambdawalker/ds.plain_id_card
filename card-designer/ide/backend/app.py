@@ -92,7 +92,7 @@ def prepare_design(design):
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     if design.template_parameters is not None:
-        design.bundle_id = 'horizontal-identity'
+        design.bundle_id = template_source(design.template_id)['bundle_id']
     return design
 
 

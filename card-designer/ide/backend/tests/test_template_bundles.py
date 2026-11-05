@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 from fastapi import HTTPException
 from backend import app as service
-from backend.template_variations import resolve_parameters, SCHEMA_V1, balanced_variants
+from backend.template_variations import resolve_parameters, SCHEMA_V1, balanced_variants, TEMPLATE_IDS, variation_schema
 
 
 class TemplateBundleTest(unittest.TestCase):
@@ -21,14 +21,30 @@ class TemplateBundleTest(unittest.TestCase):
         with self.assertRaises(HTTPException):
             service.open_bundle('../invalid')
 
+    def test_every_gallery_template_has_fixed_layout_and_no_synthetic_fields(self):
+        self.assertEqual(len(service.list_template_bundles()),7)
+        self.assertEqual(len(service.list_templates()),14)
+        for item in service.list_templates():
+            source=service.open_template(item['id'])
+            self.assertTrue(source['layout'])
+            self.assertNotIn('gen.',source['template']+source['css'])
+            self.assertNotIn('| random',source['template']+source['css'])
+            self.assertIn('identity.',source['template'])
+            self.assertIn('lambdaWalker/ds.photo_id',source['required_datasets'])
+            design=service.Design(**source,seed=42,color='#ffffff',background='plain')
+            preview=service.preview(service.Preview(design=design))
+            self.assertNotIn('generator',preview['context'])
+        for alias, key in [('B','B-left'),('C','C-top'),('D','D-left'),('E','E-codes-top'),('F','F-rail-left'),('G','G-photo-left')]:
+            self.assertEqual(service.open_template(alias)['template_id'],key)
+
     def test_parameters_are_bounded_deterministic_and_separate_from_global_rng(self):
         state = random.getstate()
         orders = set()
-        for key in ['A-left','A-right']:
+        for key in TEMPLATE_IDS:
             for seed in range(128):
                 parameters = resolve_parameters(key, seed)
                 self.assertEqual(parameters, resolve_parameters(key, seed))
-                for name, (low, high) in SCHEMA_V1.items():
+                for name, (low, high) in variation_schema(key).items():
                     self.assertLessEqual(low, parameters[name])
                     self.assertLessEqual(parameters[name], high)
                 orders.add(parameters['dates_reversed'])

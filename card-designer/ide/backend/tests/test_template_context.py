@@ -18,7 +18,7 @@ class TemplateProjectionTest(unittest.TestCase):
         snapshot = self.snapshot()
         for letter in 'BCDEFG':
             with self.subTest(letter=letter), patch('backend.render_context.metadata', side_effect=AssertionError('Unneeded metadata read')):
-                design = service.Design(**template_source(letter), seed=42, color='#ffffff', background='plain')
+                design = service.Design(name=letter,template='<img src="{{ assets.photo }}">',css='',seed=42,color='#ffffff',background='plain')
                 context, summary = project_context(snapshot, design, {}, random.Random(42))
                 self.assertNotIn('ds', context)
                 self.assertNotIn('datasets', summary)
@@ -65,7 +65,7 @@ class TemplateProjectionTest(unittest.TestCase):
         snapshot = self.snapshot()
         snapshot['fields']['photo-1'] = {'address':'fixture'}
         snapshot['types']['photo-1'] = {'address':'json'}
-        design = service.Design(**template_source('B'), sample='photo-1', seed=42, color='#ffffff', background='plain')
+        design = service.Design(name='Address',template='<img src="{{ assets.photo }}">{{ gen.address.city().data }}',css='',sample='photo-1',seed=42,color='#ffffff',background='plain')
         with patch.object(service, 'catalog', snapshot), patch.object(service, 'metadata', return_value={'address':{'city':'Dataset City'}}):
             response = service.preview(service.Preview(design=design))
         self.assertIn('Dataset City', response['template'])
@@ -75,7 +75,7 @@ class TemplateProjectionTest(unittest.TestCase):
         snapshot = self.snapshot()
         snapshot['fields']['photo-1'] = {'card':'unreadable'}
         snapshot['types']['photo-1'] = {'card':'json'}
-        design = service.Design(**template_source('E'), sample='photo-1', seed=42, color='#ffffff', background='plain')
+        design = service.Design(name='Image',template='<img src="{{ assets.pdf417 }}">',css='',sample='photo-1',seed=42,color='#ffffff',background='plain')
         with patch.object(service, 'catalog', snapshot), patch.object(service, 'metadata', side_effect=AssertionError('Unused selected metadata read')):
             response = service.preview(service.Preview(design=design))
         self.assertEqual(response['context']['projection'], 'template')

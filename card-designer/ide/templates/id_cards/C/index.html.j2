@@ -1,66 +1,71 @@
-<div class="card">
-        <header class="card-header">
-            <div class="title-section">
-                <div class="title">
-                    <h3>{{ gen.text.sentence((1,3)) }}</h3>
-                    {% if gen.random.boolean() %}
-                        <h4>{{ gen.text.sentence((1,3)) }}</h4>
-                    {% endif %}
-                </div>
-            </div>
-        </header>
-        <main class="card-body">
-            <div class="data-section">
-                <img class="main-photo" src="{{ assets.photo }}" data-class="photo" alt="Photo">
-
-                <div class="data-item name">
-                    <p>{{ gen.text.sentence((1,3), p=False) }}</p>
-                    <p>{{ gen.text.sentence((1,2), p=False) }}</p>
-                </div>
-
-                <div class="data-item middle">
-                    <p>{{ gen.address.number().data }} {{ gen.text.sentence((1,3), p=False) }}</p>
-                    <p>{{ gen.address.block().data }} {{ gen.address.number().data }} </p>
-                    <p>{{ gen.address.city().data }}, {{ gen.address.state().data }}</p>
-                </div>
-                <div class="data-group bottom-row">
-                    {% for i in range(6) %}
-                        <div class="data-item">
-                            <label>{{ gen.text.word((1,3)) }}</label>
-                            <p>{{ gen.text.word((1,3)) }}</p>
-                        </div>
-                    {% endfor %}
-                </div>
-
-                <div class="data-item key-curp">
-                    <div class="curp">
-                        <label>{{ gen.text.word((2,4)) }}</label>
-                        <span>{{ gen.random.hex(18) }}</span>
-                    </div>
-                    <div class="year">
-                        <label>{{ gen.text.word((2,4)) }}</label>
-                        <span>{{ gen.time.year_as_number().data }}</span>
-                    </div>
-                    <div class="year">
-                        <label>{{ gen.text.word((2,4)) }}</label>
-                        <span>{{ gen.time.year_as_number().data }}</span>
-                    </div>
-                </div>
-
-                <div class="data-group bottom-row">
-                    {% for i in range(3) %}
-                        <div class="data-item">
-                            <label>{{ gen.text.word((1,3)) }}</label>
-                            <p>{{ gen.text.word((1,3)) }}</p>
-                        </div>
-                    {% endfor %}
-                </div>
-
-                <div class="data-item middle">
-                    <p><span>{{ gen.text.letter() }}.</span> {{ gen.address.number().data }} {{ gen.text.sentence((1,3), p=False) }}</p>
-                    <p><span>{{ gen.text.letter() }}.</span> {{ gen.address.block().data }} {{ gen.address.number().data }} </p>
-                </div>
-
-            </div>
-        </main>
+<div class="card bundle-card">
+  <header class="card-header">
+    <div class="title-section">
+      <h1>{{ common.get('card_title') or identity.document_type or 'IDENTITY CARD' }}</h1>
+      <h2>{{ common.get('issuer') or identity.issuing_authority or 'SPECIMEN' }}</h2>
     </div>
+  </header>
+  <main class="identity-body">
+    <div class="photo-section">
+      <img
+        class="main-photo"
+        src="{{ assets.photo }}"
+        data-class="photo"
+        alt="Portrait"
+      />
+    </div>
+    <div class="identity-details field-grid">
+      <div class="data-item name full">
+        <label>NAME</label>
+        <p>{{ identity.full_name or '—' }}</p>
+      </div>
+      <div class="data-item birth">
+        <label>DATE OF BIRTH</label>
+        <p>{{ identity.birth_date or '—' }}</p>
+      </div>
+      <div class="data-item sex">
+        <label>SEX</label>
+        <p>{{ identity.sex or '—' }}</p>
+      </div>
+      <div class="data-item address full">
+        <label>ADDRESS</label>
+        <p>{{ identity.address_line1 or '—' }}</p>
+        {% if identity.address_line2 %}
+        <p>{{ identity.address_line2 }}</p>
+        {% endif %}
+      </div>
+      <div class="data-item ">
+        <label>DOCUMENT NUMBER</label>
+        <p>{{ identity.document_number or '—' }}</p>
+      </div>
+      <div class="data-item ">
+        <label>NATIONALITY</label>
+        <p>{{ identity.nationality or '—' }}</p>
+      </div>
+      <div class="physical-grid full">
+        <div class="data-item ">
+          <label>HEIGHT</label>
+          <p>{{ identity.height or '—' }}</p>
+        </div>
+        <div class="data-item ">
+          <label>EYES</label>
+          <p>{{ identity.eye_color or '—' }}</p>
+        </div>
+        <div class="data-item ">
+          <label>BLOOD TYPE</label>
+          <p>{{ identity.blood_type or '—' }}</p>
+        </div>
+      </div>
+      <div class="dates full">
+        <div class="data-item issued">
+          <label>ISSUED</label>
+          <p>{{ identity.issue_date or '—' }}</p>
+        </div>
+        <div class="data-item expires">
+          <label>EXPIRES</label>
+          <p>{{ identity.expiry_date or '—' }}</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>

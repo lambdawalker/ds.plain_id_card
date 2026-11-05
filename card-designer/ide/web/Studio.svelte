@@ -11,6 +11,40 @@
  let copying=false,previewWidth=640,previewHeight=400;
  async function copyImage(){if(copying||!preview)return;copying=true;try{await copyCardImage(preview,previewWidth,previewHeight);notice='Card image copied'}catch(e){notice='Could not copy image: '+e.message}finally{copying=false}}
  let preview='',output='',renderedCSS='',context={},error='',notice='';
+ let previewTabs=[],activePreviewId='',previewCounter=0;
+ function previewState(){return {design:structuredClone(design),id,saved,preview,output,renderedCSS,context:structuredClone(context),error,previewWidth,previewHeight}}
+ function rememberPreview(){
+   const state=previewState();
+   if(!activePreviewId){activePreviewId='preview-'+(++previewCounter);previewTabs=[{key:activePreviewId,...state}]}
+   else previewTabs=previewTabs.map(tab=>tab.key===activePreviewId?{...tab,...state}:tab);
+ }
+ function restorePreview(tab){
+   serial++;randomSerial++;randomizing=false;
+   activePreviewId=tab.key;design=structuredClone(tab.design);id=tab.id;saved=tab.saved;
+   preview=tab.preview;output=tab.output;renderedCSS=tab.renderedCSS;context=structuredClone(tab.context);error=tab.error;
+   previewWidth=tab.previewWidth;previewHeight=tab.previewHeight;notice='';
+ }
+ function switchPreview(key){if(key===activePreviewId||busy||templateOpening)return;rememberPreview();const tab=previewTabs.find(tab=>tab.key===key);if(tab)restorePreview(tab)}
+ function previewTabKey(e,index){
+   if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
+   e.preventDefault();const next=e.key==='Home'?0:e.key==='End'?previewTabs.length-1:(index+(e.key==='ArrowRight'?1:-1)+previewTabs.length)%previewTabs.length;
+   switchPreview(previewTabs[next].key);document.getElementById(previewTabs[next].key)?.focus();
+ }
+ function hasUnsavedPreviews(){return dirty||previewTabs.some(tab=>tab.key!==activePreviewId&&JSON.stringify(tab.design)!==tab.saved)}
+ async function openBundle(bundle){
+   if(templateOpening||busy)return;templateOpening=bundle.id;
+   try{
+     if(hasUnsavedPreviews()&&await askAction('discard','Unsaved changes','Replace all open preview tabs? Unsaved changes in those tabs will be discarded.','Discard changes')!==true)return;
+     randomSerial++;randomizing=false;
+     const settings=structuredClone(currentSettings());
+     const sources=await Promise.all(bundle.templates.map(item=>api('templates/'+encodeURIComponent(item.id))));
+     const drafts=sources.map(source=>{const cached=templates.find(item=>item.id===source.id)?.render;
+       return {key:'preview-'+(++previewCounter),design:{...starter,...source,...settings},id:null,saved:JSON.stringify(starter),preview:cached?.html||'',output:cached?.template||'',renderedCSS:cached?.css||'',context:cached?.context||{},error:'',previewWidth:source.width,previewHeight:source.height};
+     });
+     previewTabs=drafts;restorePreview(drafts[0]);closeTemplates();
+   }catch(e){templatesError=e.message}
+   finally{templateOpening=null}
+ }
  let theme=localStorage.getItem('studio-theme')||'system',zoom='fit',width=720,stageHeight=600,tab='HTML',serial=0;
  let media=window.matchMedia("(prefers-color-scheme: dark)"),systemDark=media.matches;
  $: dark=theme==="dark"||(theme==="system"&&systemDark);
@@ -211,7 +245,7 @@
  async function open(key){
    randomSerial++;randomizing=false;
    const next=themedDesign(key?await api('designs/'+key):{...starter});
-   id=key; design=next; saved=JSON.stringify(next); notice='';
+   id=key; design=next; saved=JSON.stringify(next); notice='';rememberPreview();
  }
  let actionDialog,actionResolve=null,actionKind='',actionTitle='',actionMessage='',actionLabel='',actionValue='';
  function askAction(kind,title,message,label,value=''){
@@ -234,7 +268,7 @@
  async function canLeave(){
    return !dirty||await askAction('discard','Unsaved changes','Your design has unsaved changes. Discard them and continue?','Discard changes')===true;
  }
- async function act(fn){if(busy)return;busy=true;try{await fn()}catch(e){notice=e.message}finally{busy=false}}
+ async function act(fn){if(busy||templateOpening)return;busy=true;try{await fn()}catch(e){notice=e.message}finally{busy=false}}
  onMount(()=>{
    const onTheme=e=>systemDark=e.matches;media.addEventListener("change",onTheme);
    act(async()=>{assets=await api("artwork");await refresh();await open(designs[0]?.id);ready=true});
@@ -249,7 +283,7 @@
  }
  let templateDialog,templateBundles=[],templates=[],templatesLoading=false,templatesError='',templateSerial=0,templateOpening=null;
  let gallerySettings={};
- function currentSettings(){return {seed:design.seed,color:design.color,background:design.background,background_recipe:design.background_recipe,sample:design.sample,auto_theme:design.auto_theme,text_color:design.text_color}}
+ function currentSettings(){return {common:design.common||{},seed:design.seed,color:design.color,background:design.background,background_recipe:design.background_recipe,sample:design.sample,auto_theme:design.auto_theme,text_color:design.text_color}}
  async function showTemplates(){
    templateDialog.showModal();
    const current=++templateSerial;
@@ -268,7 +302,7 @@
          const source=await api('templates/'+encodeURIComponent(items[index].id));
          const result=await renderCard({...starter,...source,...gallerySettings});
          if(current!==templateSerial)return;
-         templates=templates.map((item,i)=>i===index?{...item,source,html:result.html,state:'ready'}:item);
+         templates=templates.map((item,i)=>i===index?{...item,source,html:result.html,render:result,state:'ready'}:item);
        }catch(e){if(current===templateSerial)templates=templates.map((item,i)=>i===index?{...item,state:'error',error:e.message}:item)}
      }
    }catch(e){if(current===templateSerial)templatesError=e.message}
@@ -276,7 +310,7 @@
  }
  function closeTemplates(){templateSerial++;templateDialog.close()}
  async function selectTemplate(item){
-   if(templateOpening)return;
+   if(templateOpening||busy)return;
    templateOpening=item.id;
    try{
      if(!await canLeave())return;
@@ -305,8 +339,8 @@
      try{const result=await renderCard(d,{scale:displayScale});if(current!==serial)return;
        preview=result.html;previewWidth=d.width||640;previewHeight=d.height||400;output=result.template;renderedCSS=result.css;context={...(result.context||{}),seed:d.seed,sample:result.person,background:d.background,recipe:result.background_recipe};error='';
        const formatted=await Promise.all([formatOutput(result.template,'html'),formatOutput(result.css,'css')]);
-       if(current===serial)[output,renderedCSS]=formatted;
-     }catch(e){if(current===serial)error=e.message}
+       if(current===serial){[output,renderedCSS]=formatted;rememberPreview()}
+     }catch(e){if(current===serial){error=e.message;rememberPreview()}}
    },140)
  }
  $: if(ready)schedule({...design},scale);
@@ -335,7 +369,7 @@
    handle.onpointerup=()=>{handle.onpointermove=null};
  }
 </script>
-<svelte:window on:resize={positionSettings} on:keydown={key} on:beforeunload={e=>{if(ready&&dirty){e.preventDefault();e.returnValue=''}}}/>
+<svelte:window on:resize={positionSettings} on:keydown={key} on:beforeunload={e=>{if(ready&&hasUnsavedPreviews()){e.preventDefault();e.returnValue=''}}}/>
 <header class="top"><strong><i>▧</i> Card Designer</strong><span class="tag">STUDIO</span>
 <select aria-label="Open design" value={id??''} disabled={busy||!!templateOpening} on:change={e=>{let k=Number(e.target.value);e.target.value=id??'';act(async()=>{if(await canLeave())await open(k)})}}>
 {#if !id}<option value="">Current draft</option>{/if}{#each designs as d}<option value={d.id}>{d.name}</option>{/each}</select>
@@ -374,8 +408,10 @@
 </div></section>
 <button class="grip" aria-label="Resize source panel" on:pointerdown={e=>resize(e,'left')} on:keydown={e=>{if(e.key==='ArrowRight')left=Math.min(38,left+1);if(e.key==='ArrowLeft')left=Math.max(15,left-1)}}></button>
 <section class="canvas"><div class="bar">02 / PREVIEW <span class="editor-actions"><button class="icon-button" aria-label="Copy card image" title="Copy card image" disabled={copying||!preview} on:click={copyImage}><Icon name="clone"/></button><select aria-label="Zoom" bind:value={zoom}><option value="fit">Fit</option><option value=".5">50%</option><option value="1">100%</option><option value="1.5">150%</option></select></span></div>
+{#if previewTabs.length>1}<nav class="preview-tabs" role="tablist" aria-label="Card layouts">{#each previewTabs as tab,index (tab.key)}<button id={tab.key} role="tab" aria-selected={activePreviewId===tab.key} aria-controls="card-preview-panel" tabindex={activePreviewId===tab.key?0:-1} disabled={busy||!!templateOpening} class:active={activePreviewId===tab.key} on:click={()=>switchPreview(tab.key)} on:keydown={e=>previewTabKey(e,index)}>{activePreviewId===tab.key?design.name:tab.design.name}</button>{/each}</nav>{/if}
+<div class="preview-tab-panel" id="card-preview-panel" role={previewTabs.length>1?'tabpanel':undefined} aria-labelledby={previewTabs.length>1?activePreviewId:undefined}>
 <div class="stage" bind:clientWidth={width} bind:clientHeight={stageHeight}><div class="art"><div class="ruler" aria-hidden="true" style={"background-size:"+scale*32+"px 100%"}></div><small>SPECIMEN　 /　{cardWidth} × {cardHeight}</small><div style={'width:'+cardWidth*scale+'px;height:'+cardHeight*scale+'px'}><iframe title="Card preview" sandbox="" srcdoc={preview} style={'width:'+cardWidth+'px;height:'+cardHeight+'px;transform:scale('+scale+')'}></iframe></div></div></div>
-{#if error}<div role="alert">{error}</div>{/if}</section>
+{#if error}<div role="alert">{error}</div>{/if}</div></section>
 <button class="grip" aria-label="Resize inspector" on:pointerdown={e=>resize(e,'right')} on:keydown={e=>{if(e.key==='ArrowLeft')right=Math.min(38,right+1);if(e.key==='ArrowRight')right=Math.max(15,right-1)}}></button>
 <section class="inspect" class:exploring={inspector==='Data sources'}><div class="bar">03 / EXPLORE</div>
 <nav aria-label="Right panel">{#each ['Inspect','Data sources'] as panel}<button class:active={inspector===panel} on:click={()=>{inspector=panel;if(panel==='Data sources'&&!sourceListLoading&&sourceId!==null){if(!sourceRecords.length)browseSource();else tick().then(maybeMore)}}}>{panel}</button>{/each}</nav>
@@ -459,16 +495,18 @@
 </form>
 </dialog>
 
-<dialog class="template-dialog" bind:this={templateDialog} aria-labelledby="template-dialog-title" aria-describedby="template-dialog-help" on:cancel={()=>templateSerial++}>
-<div class="template-dialog-header"><div><h2 id="template-dialog-title">Open a template</h2><p id="template-dialog-help">Choose a bundle and an explicit layout. The seed varies spacing and typography without changing the layout.</p></div><button class="icon-button" title="Close templates" aria-label="Close templates" on:click={closeTemplates}><Icon name="close"/></button></div>
+<dialog class="template-dialog" bind:this={templateDialog} aria-labelledby="template-dialog-title" aria-describedby="template-dialog-help" on:cancel={e=>{if(templateOpening){e.preventDefault();return}templateSerial++}}>
+<div class="template-dialog-header"><div><h2 id="template-dialog-title">Open a template</h2><p id="template-dialog-help">Choose a bundle and an explicit layout. The seed varies spacing and typography without changing the layout.</p></div><button class="icon-button" title="Close templates" aria-label="Close templates" disabled={busy||!!templateOpening} on:click={closeTemplates}><Icon name="close"/></button></div>
 {#if templatesLoading}<p class="gallery-status" role="status"><span class="source-spinner" aria-hidden="true"></span> Loading templates…</p>
 {:else if templatesError}<div class="gallery-status" role="alert"><p>{templatesError}</p><button on:click={showTemplates}>Try again</button></div>
 {:else if !templates.length}<p class="gallery-status">No templates available.</p>
 {:else}{#each templateBundles as bundle (bundle.id)}
-<section class="template-bundle" aria-labelledby={'bundle-'+bundle.id}><div class="bundle-heading"><h3 id={'bundle-'+bundle.id}>{bundle.name}</h3><p>{bundle.description}</p></div>
+<section class="template-bundle" aria-labelledby={'bundle-'+bundle.id}><div class="bundle-heading"><h3 id={'bundle-'+bundle.id}>{bundle.name}</h3><p>{bundle.description}</p><button class="open-bundle" disabled={busy||!!templateOpening} on:click={()=>openBundle(bundle)} aria-label={'Open bundle '+bundle.name}>Open bundle · {bundle.templates.length} tabs</button>
+<button class="bundle-stack" disabled={busy||!!templateOpening} on:click={()=>openBundle(bundle)} aria-label={'Open '+bundle.name+' bundle preview'}>
+{#each templates.filter(item=>item.bundle_id===bundle.id).slice(0,3) as item,index (item.id)}<span class="stack-card" aria-hidden="true" style={'width:'+item.width*Math.min(180/item.width,120/item.height)+'px;height:'+item.height*Math.min(180/item.width,120/item.height)+'px;left:'+(12+index*18)+'px;top:'+(10+index*10)+'px;z-index:'+(index+1)+';transform:rotate('+((index-1)*4)+'deg)'}>{#if item.state==='ready'}<iframe title={'Bundle preview '+item.id} sandbox="" tabindex="-1" srcdoc={item.html} style={'width:'+item.width+'px;height:'+item.height+'px;transform:scale('+Math.min(180/item.width,120/item.height)+')'}></iframe>{:else}<span class="source-spinner"></span>{/if}</span>{/each}<span class="stack-count">{bundle.templates.length} layouts</span></button></div>
 <div class="template-grid">
 {#each templates.filter(item=>item.bundle_id===bundle.id) as item (item.id)}
-<button class="template-card" disabled={!!templateOpening} on:click={()=>selectTemplate(item)} aria-label={'Open '+item.name}>
+<button class="template-card" disabled={busy||!!templateOpening} on:click={()=>selectTemplate(item)} aria-label={'Open '+item.name}>
 <div class="template-thumbnail">
 {#if item.state==='ready'}<div class="thumbnail-frame" style={'width:'+item.width*(Math.min(220/item.width,180/item.height))+'px;height:'+item.height*(Math.min(220/item.width,180/item.height))+'px'}><iframe title={'Preview template '+item.id} sandbox="" tabindex="-1" srcdoc={item.html} style={'width:'+item.width+'px;height:'+item.height+'px;transform:scale('+Math.min(220/item.width,180/item.height)+')'}></iframe></div>
 {:else if item.state==='loading'}<span role="status"><span class="source-spinner" aria-hidden="true"></span> Rendering preview…</span>

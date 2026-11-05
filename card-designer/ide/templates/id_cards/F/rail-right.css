@@ -1,0 +1,1 @@
+.card { --rail-columns: minmax(0, 1fr) 120px; --rail-column: 2; --content-column: 1; }
