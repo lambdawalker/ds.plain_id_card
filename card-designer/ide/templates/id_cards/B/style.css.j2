@@ -1,59 +1,20 @@
-.title-section {
-    display: flex;
-    flex-direction: row;
-}
+/* Structural placement is defined by the selected layout file. */
+.card { width: 100%; height: 100%; padding: {{ variation.margin }}px; font-size: {{ variation.font_size }}px; display: flex; flex-direction: column; gap: {{ variation.header_gap }}px; }
+.card-header { margin: 0; flex-shrink: 0; }
+.title-section { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 24px; align-items: start; }
+.title-section h1 { font-size: {{ variation.font_size * 1.5 }}px; margin: 0; }
+.title-section h2 { font-size: {{ variation.font_size * 1.15 }}px; text-align: right; margin: 0; }
+.data-item { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.data-item p { margin: 3px 0 0; line-height: 1.2; }
+.data-item label { font-size: {{ variation.label_size }}px; margin: 0; }
+.field-grid, .dates { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: {{ variation.field_gap }}px 24px; align-content: start; }
+.full { grid-column: 1 / -1; }
+.physical-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.dates .issued { order: {{ variation.dates_reversed }}; }
+.dates .expires { order: {{ 1 - variation.dates_reversed }}; }
+.code-image { display: block; object-fit: contain; max-width: 100%; }
 
-.title-section > div {
-    flex: 1;
-}
-
-p span {
-    font-size: .7em;
-}
-
-.middle, .bottom-row {
-    font-size: .9em;
-    margin-top: 3em;
-}
-
-.bottom-row .label {
-    font-size: .8em;
-    font-weight: bold;
-}
-
-h1, h2, h3, h4, h5, h6 {
-    text-align: left;
-}
-
-.title > * {
-    text-align: {{ ["left", "center", "right"] |random }};
-}
-
-.data-section {
-    display: flex;
-    flex-direction: {{ ["column", "column-reverse"] | random }};;
-}
-
-.name-holder {
-    display: flex;
-    align-items: center;
-    justify-items: stretch;
-    flex-direction: {{ ["row", "row-reverse"] | random }};
-}
-
-.name-holder > div {
-    flex-grow: 1;
-}
-
-{%- set direction = [0,1] | random -%}
-
-
-.card-body {
-    flex-direction: {{ ["row", "row-reverse"][direction] }};
-}
-
-.small-photo {
-    top: auto; bottom: 8mm; right: 8mm; left: auto;
-}
-
-
+.identity-body { display: grid; grid-template-columns: var(--portrait-columns); gap: {{ variation.column_gap }}px; align-items: start; }
+.photo-section { grid-column: var(--portrait-column); grid-row: 1; }
+.main-photo { width: 340px; height: 450px; object-fit: cover; }
+.identity-details { grid-column: var(--data-column); grid-row: 1; min-width: 0; }

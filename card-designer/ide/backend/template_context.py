@@ -33,7 +33,7 @@ def requirements(template, css=''):
     if unknown:
         raise ValueError('Unknown template assets: ' + ', '.join(sorted(unknown)))
     address = any(isinstance(node.node, nodes.Name) and node.node.name == 'gen' and node.attr == 'address' for tree in trees for node in tree.find_all(nodes.Getattr))
-    return {'assets': sorted(assets), 'identity': 'identity' in names, 'card': 'card' in names, 'address': address, 'compatibility': compatibility}
+    return {'assets': sorted(assets), 'identity': 'identity' in names, 'card': 'card' in names, 'address': address, 'generators': 'gen' in names, 'compatibility': compatibility}
 
 
 def project_context(snapshot, design, person, rng):
@@ -56,12 +56,16 @@ def project_context(snapshot, design, person, rng):
                 for dataset, group in summary['datasets'].items()}
     context['assets'] = assets
     context.pop('person', None)
+    if not requested['generators']:
+        context.pop('gen', None)
     context['data'] = {key: context['data'][key] for key in ('id', 'index')}
     if not requested['identity']:
         context.pop('identity', None)
     if not requested['card']:
         context.pop('card', None)
-    compact = {key: summary[key] for key in ('common', 'env', 'missing', 'selection', 'generator')}
+    compact = {key: summary[key] for key in ('common', 'env', 'missing', 'selection')}
+    if requested['generators']:
+        compact['generator'] = summary['generator']
     compact.update(data=context['data'], assets=assets, bindings=bindings, projection='template')
     if requested['identity']:
         compact['identity'] = context['identity']

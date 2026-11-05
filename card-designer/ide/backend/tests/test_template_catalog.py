@@ -6,9 +6,10 @@ from backend import app as service
 class TemplateCatalogTest(unittest.TestCase):
     def test_catalog_contains_all_original_variants_and_native_dimensions(self):
         items = service.list_templates()
-        self.assertEqual([item['id'] for item in items], ['A-left','A-right',*list('BCDEFG')])
+        from backend.template_variations import TEMPLATE_IDS
+        self.assertEqual([item['id'] for item in items], list(TEMPLATE_IDS))
         for item in items:
-            self.assertGreater(item['height'], item['width']) if item['id'] in 'CD' else self.assertGreater(item['width'], item['height'])
+            self.assertGreater(item['height'], item['width']) if item['kind']=='vertical_card' else self.assertGreater(item['width'], item['height'])
             source = service.open_template(item['id'])
             self.assertNotIn('/ds/', source['template'])
             self.assertIn('assets.', source['template'])
@@ -50,4 +51,4 @@ class TemplateCatalogTest(unittest.TestCase):
             design = service.Design(**service.open_template('C'), seed=42, color='#a4d5c8', background='plain')
             key = service.create(design)['id']
             saved = service.read(key)
-            self.assertEqual((saved.width, saved.height, saved.template_id), (740, 1285, 'C'))
+            self.assertEqual((saved.width, saved.height, saved.template_id), (740, 1285, 'C-top'))

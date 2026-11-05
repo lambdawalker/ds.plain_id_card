@@ -22,7 +22,8 @@ try {
     const source = await (
       await page.request.get(base + "/api/templates/" + letter)
     ).json();
-    let worst = null;
+    let worst = null,
+      structure;
     for (let seed = 0; seed < Number(process.env.LAYOUT_SEEDS || 64); seed++) {
       const r = await page.request.post(base + "/api/preview", {
         data: {
@@ -176,8 +177,29 @@ try {
             )
               overlaps.push([a.text, b.text]);
           }
-        return { outside, overlaps };
+        const structure = {};
+        for (const selector of [
+          ".photo-section",
+          ".identity-details",
+          ".code-panel",
+          ".back-details",
+          ".barcode-rail",
+          ".rail-content",
+        ]) {
+          const element = root.querySelector(selector);
+          if (element) {
+            const style = getComputedStyle(element);
+            structure[selector] = {
+              column: style.gridColumnStart,
+              order: style.order,
+            };
+          }
+        }
+        return { outside, overlaps, structure };
       });
+      if (seed === 0) structure = JSON.stringify(audit.structure);
+      else if (structure !== JSON.stringify(audit.structure))
+        throw Error(letter + " structural positions changed with seed");
       reports.push({ letter, seed, ...audit });
       if (
         !worst ||

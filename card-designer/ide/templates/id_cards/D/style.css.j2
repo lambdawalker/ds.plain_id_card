@@ -1,58 +1,22 @@
-.card {
-    width: 195.5mm; /* Approximate ID card width */
-    height: 340mm; /* Approximate ID card height */
-}
+/* Structural placement is defined by the selected layout file. */
+.card { width: 100%; height: 100%; padding: {{ variation.margin }}px; font-size: {{ variation.font_size }}px; display: flex; flex-direction: column; gap: {{ variation.header_gap }}px; }
+.card-header { margin: 0; flex-shrink: 0; }
+.title-section { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 24px; align-items: start; }
+.title-section h1 { font-size: {{ variation.font_size * 1.5 }}px; margin: 0; }
+.title-section h2 { font-size: {{ variation.font_size * 1.15 }}px; text-align: right; margin: 0; }
+.data-item { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.data-item p { margin: 3px 0 0; line-height: 1.2; }
+.data-item label { font-size: {{ variation.label_size }}px; margin: 0; }
+.field-grid, .dates { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: {{ variation.field_gap }}px 24px; align-content: start; }
+.full { grid-column: 1 / -1; }
+.physical-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.dates .issued { order: {{ variation.dates_reversed }}; }
+.dates .expires { order: {{ 1 - variation.dates_reversed }}; }
+.code-image { display: block; object-fit: contain; max-width: 100%; }
 
-.card-body {
-    margin-top: 15mm;
-}
+.identity-body { display: grid; grid-template-columns: var(--portrait-columns); gap: {{ variation.column_gap }}px; align-items: start; }
+.photo-section { grid-column: var(--portrait-column); grid-row: 1; }
+.main-photo { width: 220px; height: 320px; object-fit: cover; }
+.identity-details { grid-column: var(--data-column); grid-row: 1; min-width: 0; }
 
-.bottom-row {
-    clear: both;
-}
-
-.main-photo {
-    display: block;
-    height: {{ gen.random.number(70, 100) }}mm;
-    width: {{ gen.random.number(80, 100) }}mm;
-    float: left;
-    margin: 0 10mm 10mm 10mm
-}
-
-
-.title-section {
-    display: flex;
-    flex-direction: row;
-}
-
-.title-section > div {
-    flex: 1;
-}
-
-p span {
-    font-size: .7em;
-}
-
-.middle, .bottom-row {
-    font-size: .9em;
-    margin-top: 3em;
-}
-
-.bottom-row .label {
-    font-size: .8em;
-    font-weight: bold;
-}
-
-h1, h2, h3, h4, h5, h6 {
-    text-align: left;
-}
-
-.title > * {
-    text-align: {{ ["left", "center", "right"] |random }};
-}
-
-.small-photo {
-    right: {{ (range(5, 25) | random) }}mm;
-    top: {{ range(0, 25) | random }}mm;
-}
-
+.title-section { grid-template-columns: minmax(0, 1fr); gap: 8px; }.title-section h2 { text-align: left; }

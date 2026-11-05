@@ -1,106 +1,17 @@
-{# Logic: Define variables at the top #}
-{%- set fonts = ['Arial', 'Verdana', 'Georgia', 'Courier New', 'Brush Script MT'] -%}
-{%- set flex_dir = ['row', 'row-reverse'] | random -%}
-{%- set main_dir = ['column', 'column-reverse'] | random -%}
-{%- set footer_dir = ['row', 'column', 'row-reverse'] | random -%}
-{%- set scale = (range(100, 115) | random) / 100 -%}
-{%- set footer_gap = range(2, 8) | random -%}
-{%- set qrcode_scale = (range(60, 100) | random) / 100 -%}
-{%- set qrcode_space_scale = (range(10, 100) | random) / 100 -%}
+/* Structural placement is defined by the selected layout file. */
+.card { width: 100%; height: 100%; padding: {{ variation.margin }}px; font-size: {{ variation.font_size }}px; display: flex; flex-direction: column; gap: {{ variation.header_gap }}px; }
+.card-header { margin: 0; flex-shrink: 0; }
+.title-section { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 24px; align-items: start; }
+.title-section h1 { font-size: {{ variation.font_size * 1.5 }}px; margin: 0; }
+.title-section h2 { font-size: {{ variation.font_size * 1.15 }}px; text-align: right; margin: 0; }
+.data-item { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.data-item p { margin: 3px 0 0; line-height: 1.2; }
+.data-item label { font-size: {{ variation.label_size }}px; margin: 0; }
+.field-grid, .dates { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: {{ variation.field_gap }}px 24px; align-content: start; }
+.full { grid-column: 1 / -1; }
+.physical-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.dates .issued { order: {{ variation.dates_reversed }}; }
+.dates .expires { order: {{ 1 - variation.dates_reversed }}; }
+.code-image { display: block; object-fit: contain; max-width: 100%; }
 
-#view-port {
-    display: inline-block;
-}
-
-
-body {
-    color: {{ env.theme.text_color.to_rgb_hex() if env.theme.text_color else '#000' }};
-    font-family: {{ fonts | random }};
-}
-
-.card {
-    margin: 0;
-    padding: 0;
-    border: none;
-
-    width: 357mm;
-    height: 213mm;
-
-
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-}
-
-.card > div {
-    padding:0 10mm;
-    height: 140mm;
-    display: flex;
-    align-items: center;
-    flex-direction: {{ flex_dir }};
-}
-
-main {
-    height: 100%;
-    flex-grow: 1;
-    display: flex;
-    /* Randomly flips content vertically (Top-to-Bottom vs Bottom-to-Top) */
-    flex-direction: {{ main_dir }};
-    overflow: hidden;
-}
-
-.pdf417 {
-    width: {{ 150 * scale }}mm;
-    height: {{ 30 * scale }}mm;
-    /* Ensures it doesn't warp if the container flips */
-    object-fit: contain;
-}
-
-.barcode, .slim-barcode {
-    writing-mode: vertical-rl;
-    transform: rotate({{ ["", "-"] | random }}90deg) scale({{ scale }});
-    height: 30mm;
-    flex-shrink: 0;
-}
-
-.slim-barcode {
-    height: 8mm;
-}
-
-.extra-text {
-    margin: 5mm; /* Balanced margin for random directions */
-    flex-grow: 1;
-}
-
-.footer {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    flex-grow: 1;
-    flex-direction: {{ footer_dir }};
-    gap: {{ footer_gap }}mm;
-}
-
-p {
-    margin-block-start: .4em;
-    margin-block-end: .4em;
-}
-
-.qrcode {
-    width: {{ 50 * qrcode_scale }}mm;
-    height: {{ 50 * qrcode_scale }}mm;
-    display: inline-block;
-}
-/* Reserve a rail for the transformed barcode; transforms do not reserve layout space. */
-.card { width: 100%; height: 100%; }
-.card > div { height: 100%; padding: 30px; gap: 24px; }
-.barcode-rail { width: 120px; flex: 0 0 120px; align-self: stretch; position: relative; }
-.barcode-rail > img { position: absolute; left: 50%; top: 50%; width: 500px; height: 100px; object-fit: contain; margin: 0; transform: translate(-50%, -50%) rotate({{ ["", "-"] | random }}90deg); }
-.barcode-rail > .slim-barcode { height: 30px; }
-main { min-width: 0; height: 100%; overflow: visible; font-size: 20px; line-height: 1.2; gap: 8px; }
-main h2 { font-size: 28px; }
-main p { margin: 4px 0; overflow-wrap: anywhere; }
-.footer { flex-grow: 0; gap: 12px; min-width: 0; }
-.extra-text { min-width: 0; margin: 12px; font-size: 16px; }
-.pdf417 { width: 400px; max-width: 100%; height: 90px; }
-.qrcode { width: 100px; height: 100px; object-fit: contain; }
+.rail-body { display: grid; grid-template-columns: var(--rail-columns); gap: 28px; flex: 1; min-height: 0; }.barcode-rail { position: relative; grid-column: var(--rail-column); grid-row: 1; min-height: 480px; }.barcode-rail .barcode { position: absolute; top: 50%; left: 50%; width: 450px; max-width: none; height: 90px; transform: translate(-50%, -50%) rotate(90deg); }.rail-content { grid-column: var(--content-column); grid-row: 1; min-width: 0; display: flex; flex-direction: column; gap: 18px; }.code-panel { display: grid; grid-template-columns: minmax(0, 1fr) 140px; gap: 24px; align-items: center; }.pdf417 { width: 500px; height: 100px; }.qrcode { width: 140px; height: 140px; }

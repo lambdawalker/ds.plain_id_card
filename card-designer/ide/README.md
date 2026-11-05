@@ -79,23 +79,23 @@ The server starts serving the IDE immediately and warms saved dataset references
 
 The UI polls `/api/datasets/status` while startup indexing runs, keeps referenced tabs visible with loading indicators, and refreshes records and saved previews when ready. A selected record that is still loading returns HTTP 503; static templates remain usable. Background failures are logged and shown in the dataset panel. Restart the server to pick up files added to connected folders. Shutdown cancels queued work and does not wait indefinitely for a blocked filesystem scan.
 
-## Original template ports and context
-The editor ports of `templates/id_cards/A` through `G` live under `ide/templates/id_cards/`. HTML keeps the original Jinja layout logic; dataset resource URLs are adapted to `ds.image(...)`. Variant CSS is included with `base.css`, a shared editor foundation because the upstream `_common_` stylesheet references are absent from this repository. Original generator templates remain unchanged. `backend/template_catalog.py` supplies the gallery metadata and editable sources through `/api/templates` and `/api/templates/{A..G}`.
+## Template families and context
+The editor versions of `templates/id_cards/A` through `G` live under `ide/templates/id_cards/`. All seven families now use explicit layout files and dataset-backed fields. Shared HTML and bounded styling are composed with `base.css`; no gallery template uses synthetic text/date/address generators or random structural positioning. Original upstream files and older saved source remain untouched for compatibility.
 
-`backend/render_context.py` implements the context used by the ports, following the original TemplateServer/TemplateRenderer flow:
+`backend/template_catalog.py` provides flat and grouped catalogs through `/api/templates` and `/api/template-bundles`. The intermediary projects the fields referenced by each template:
 
 | Name | Content |
 |---|---|
-| `person` | Explicitly selected record with metadata and image URLs; empty when none is selected |
-| `data` | Selected record data with the original filename-stem `id` and aligned record `index` |
-| `common` | Optional saved per-design values, empty by default |
-| `env.theme` | Primary/text colors, including `to_rgb_hex()` |
-| `gen` | Request-local seeded text, random, date and address generators used by A–G |
-| `ds` | Access to connected dataset records and fields |
+| `identity` | Normalized names, dates, demographics, address, document, contact and physical fields from one identity source |
+| `assets` | Requested portrait and machine-readable image URLs |
+| `data` | Record alignment anchor (`id`, `index`) |
+| `common` | Optional saved header overrides |
+| `env.theme` | Primary/text colors |
+| `variation` | Versioned, bounded styling parameters |
 
-For example, `{{ ds.image('lambdaWalker/ds.machine_readable_code', data.id, 'slim_barcode') }}` returns a served image URL. `ds['lambdaWalker/ds.photo_id'][0]` accesses a record; `.random()` uses the request seed. The historical `ds.machineReadableCode` identifier is accepted as an alias. Matching filename stems align records across sources; otherwise the same ordinal selects a record modulo each dataset's size. Without an explicit sample, the seed supplies that ordinal. Missing images use labeled neutral placeholders and are reported in Context, rather than fabricated dataset records.
+Unavailable text values show a dash. MRZ text is displayed only when supplied in `card.document.mrz`; it is never fabricated. Physical dimensions retain dataset-provided units. Barcode/QR/PDF417 images come from their dataset fields and are not synthesized from identity text.
 
-The Context inspector includes the effective data, colors, source metadata, real records used from each dataset and missing-field diagnostics. HTML and CSS share one request-local random generator, so a seed replays the same result without changing process-global randomness. The generator compatibility covers the APIs used by the seven ports; its synthetic output is not intended to reproduce the upstream library's random bytes.
+Legacy/custom templates that explicitly reference `person`, extended `data`, `ds` or `gen` retain the compatible lookup/generator context. Matching filename stems align records across sources; otherwise an ordinal selects a record modulo the source size. Without an explicit sample, the seed supplies that ordinal. Missing images remain labeled neutral placeholders and appear in Context diagnostics. The new gallery context omits the synthetic-generator marker when no generator is used.
 
 Rendering references: [original TemplateRenderer](https://github.com/lambdawalker/python_lw_drawing_tools/blob/main/src/lambdawalker/template/server/render/TemplateRenderer.py), [TemplateServer](https://github.com/lambdawalker/python_lw_drawing_tools/blob/main/src/lambdawalker/template/server/TemplateServer.py), and [field generator context](https://github.com/lambdawalker/python_lw_drawing_tools/blob/main/src/lambdawalker/template/fields.py).
 
@@ -147,7 +147,7 @@ A Horizontal keeps a stable field order (name, birth/sex, address, document, per
 
 A’s variation profile v1 permits only bounded changes: margins 24–32 px, body font 25–28 px, labels 15–17 px, field gaps 10–14 px, column gaps 28–36 px, header gaps 20–26 px, watermark opacity .08–.14, and the approved issue/expiry row ordering. The independent seeded stream does not change background or data generator random streams. Keep v1 stable; incompatible future changes require a new version.
 
-Saved designs and preview context record `bundle_id`, `template_id`, `variation_version` and resolved `template_parameters`. Supplied/stale parameter values are recomputed from the selected version, template and seed. The original B–G designs remain available in a clearly labeled legacy bundle until their structural variations are split into explicit templates.
+Saved designs and preview context record `bundle_id`, `template_id`, `variation_version` and resolved `template_parameters`. Supplied/stale parameter values are recomputed from the selected version, template and seed. B–G are also migrated to explicit variants; the legacy gallery group has been removed. The old single-letter API IDs resolve to each family’s default variant. Existing saved source is preserved until you reopen a migrated template.
 
 Bulk generation can cycle evenly through a bundle using an existing design for background, data selection and shared settings:
 
@@ -156,3 +156,24 @@ uv run --no-project --python 3.12 --with playwright python bulk.py --design 1 --
 ```
 
 The seed determines the starting variant; round-robin allocation keeps variant counts within one sample of each other. Each output `record.json` includes effective bundle/template IDs, seed and resolved parameters alongside the background recipe and bounding boxes. Without `--bundle`, bulk generation keeps the saved template.
+
+### All bundle layouts
+
+| Bundle | Templates |
+|---|---|
+| `horizontal-identity` | `A-left`, `A-right` |
+| `horizontal-details` | `B-left`, `B-right` |
+| `vertical-stack` | `C-top`, `C-bottom` |
+| `vertical-columns` | `D-left`, `D-right` |
+| `document-back` | `E-codes-top`, `E-codes-bottom` |
+| `document-back-rail` | `F-rail-left`, `F-rail-right` |
+| `document-back-photo` | `G-photo-left`, `G-photo-right` |
+
+A/B retain the v1 horizontal styling ranges. Vertical and back layouts use smaller family-specific fonts, margins and gaps, listed in each template’s `variation_schema`. Structural columns, code panels, portrait positions and barcode rotation stay fixed for every seed. Issue/expiry row order may vary within the declared profile.
+
+### Bundle previews and editor tabs
+Each gallery bundle has a clickable stack of up to three overlapping previews and an **Open bundle** button. Opening a bundle creates one preview tab per template; individual templates can still be opened separately. Each tab keeps its own in-session HTML/CSS edits, selected data/background, saved design ID, preview and inspection output. **Save** and **Copy card image** act on the active tab. Arrow keys, Home and End navigate the preview tabs.
+
+Replacing a bundle checks unsaved work in all tabs, including inactive ones. Cancel keeps the entire tab set; Discard replaces it. Save and template replacement are serialized to prevent late save results from updating a different draft. Saved designs persist individually; the open tab set is session state.
+
+The repeatable `test:bundle-tabs` browser check covers stacked previews, independent tab edits and saved IDs, aggregate unsaved protection, save/open serialization and keyboard navigation. Run it with `CARD_SERVER` against an isolated test server; it creates and removes its own saved designs.

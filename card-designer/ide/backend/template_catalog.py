@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 import yaml
 from .template_context import ASSET_SOURCES
-from .template_variations import SCHEMA_V1
+from .template_variations import variation_schema
 
 ROOT = Path(__file__).resolve().parents[1] / 'templates' / 'id_cards'
 
@@ -13,7 +13,7 @@ def bundle_registry():
 
 
 def template_source(key):
-    key = 'A-left' if key == 'A' else key
+    key = {'A':'A-left','B':'B-left','C':'C-top','D':'D-left','E':'E-codes-top','F':'F-rail-left','G':'G-photo-left'}.get(key,key)
     match = next(((bundle, variant) for bundle in bundle_registry() for variant in bundle['templates'] if variant['id'] == key), None)
     if match is None:
         raise KeyError(f'Unknown template {key!r}')
@@ -27,10 +27,12 @@ def template_source(key):
     if variant.get('layout'):
         css += '\n' + (folder / (variant['layout'] + '.css')).read_text(encoding='utf-8')
     required = sorted({ASSET_SOURCES[field][0] for field in re.findall(r'assets\.([a-z_][a-z_0-9]*)', template) if field in ASSET_SOURCES})
+    if 'identity.' in template:
+        required = sorted(set(required) | {'lambdaWalker/ds.photo_id'})
     return {'id': key, 'template_id': key, 'bundle_id': bundle['id'], 'bundle_name': bundle['name'],
             'name': variant['name'], 'description': info.get('description', '').strip(), 'kind': kind,
             'layout': variant.get('layout'), 'variation_version': variant.get('variation_version', 1),
-            'variation_schema': SCHEMA_V1 if variant.get('layout') else {},
+            'variation_schema': variation_schema(key) if variant.get('layout') else {},
             'width': width, 'height': height, 'required_datasets': required,
             'template': template, 'css': css}
 
