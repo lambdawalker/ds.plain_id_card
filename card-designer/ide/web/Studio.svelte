@@ -294,17 +294,17 @@
      await api('designs/'+id,'DELETE');await refresh();await open(designs[0]?.id);
    }
  }
- function schedule(d){
+ function schedule(d,displayScale=scale){
    const current=++serial;
    setTimeout(async()=>{if(current!==serial)return;
-     try{const result=await renderCard(d);if(current!==serial)return;
+     try{const result=await renderCard(d,{scale:displayScale});if(current!==serial)return;
        preview=result.html;output=result.template;renderedCSS=result.css;context={...(result.context||{}),seed:d.seed,sample:result.person,background:d.background,recipe:result.background_recipe};error='';
        const formatted=await Promise.all([formatOutput(result.template,'html'),formatOutput(result.css,'css')]);
        if(current===serial)[output,renderedCSS]=formatted;
      }catch(e){if(current===serial)error=e.message}
    },140)
  }
- $: if(ready)schedule({...design});
+ $: if(ready)schedule({...design},scale);
  function key(e){
    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){
      e.preventDefault();if(!actionDialog?.open)act(save);

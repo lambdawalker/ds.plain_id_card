@@ -1,5 +1,5 @@
 import type { Parameters } from "./parameters.ts";
-import { surface } from "../../surface.ts";
+import { surface, dimensions } from "../../surface.ts";
 import { rgb } from "../../color/index.ts";
 import { fragment } from "./shader.ts";
 export function paint(ctx: CanvasRenderingContext2D, p: Parameters): void {
@@ -54,7 +54,8 @@ export function paint(ctx: CanvasRenderingContext2D, p: Parameters): void {
     gl.uniform3fv(uniform("col2"), rgb(p.color_b));
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    ctx.drawImage(canvas, 0, 0);
+    const size = dimensions(ctx);
+    ctx.drawImage(canvas, 0, 0, size.width, size.height);
   } finally {
     gl.deleteBuffer(buffer);
     gl.deleteProgram(program);

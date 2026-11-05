@@ -56,6 +56,21 @@ try {
       if (!painted) throw Error(id + " painted no pixels");
       results.push({ component: id, painted });
     }
+    // Render every component at the final backing resolution without changing its recipe.
+    for (const [id, component] of Object.entries(registry)) {
+      const recipe = parameters({family:"type-b",width:320,height:200,seed:42,color:"#567890"});
+      recipe.layers = [{role:"test",component:id,parameters:component.parameters(random(42,id),"#567890")}];
+      const before = JSON.stringify(recipe);
+      const native = await replay(recipe);
+      const sharp = await replay(recipe,{width:640,height:400});
+      if(sharp.canvas.width!==640||sharp.canvas.height!==400||JSON.stringify(recipe)!==before)throw Error(id+" changed recipe or target size");
+      const down = document.createElement("canvas");down.width=320;down.height=200;
+      const ctx=down.getContext("2d");ctx.drawImage(sharp.canvas,0,0,320,200);
+      const a=native.canvas.getContext("2d").getImageData(0,0,320,200).data,b=ctx.getImageData(0,0,320,200).data;
+      const error=a.reduce((sum,value,index)=>sum+Math.abs(value-b[index]),0)/a.length;
+      if(error>(id==="shapes/country_contour"?1:12))throw Error(id+" changed layout at higher resolution: "+error);
+      results.push({component:id,resolution:"2x",meanError:error});
+    }
     for (const family of ["type-a", "type-b", "type-c", "type-d"]) {
       for (const [width, height] of [
         [320, 200],
@@ -103,7 +118,7 @@ try {
     if (!rejected) throw Error("Invalid recipe was accepted");
     return results;
   });
-  assert.equal(report.filter((r) => r.component).length, 19);
+  assert.equal(report.filter((r) => r.component && !r.resolution).length, 19);
   console.log(JSON.stringify(report, null, 2));
 } finally {
   await browser?.close();
