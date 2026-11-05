@@ -245,9 +245,9 @@
    const resolved=themedDesign(design);
    const snapshot={...resolved,background_recipe:await backgroundRecipe(resolved)};
    const result=await api(id?'designs/'+id:'designs',id?'PUT':'POST',snapshot);
-   id=result.id;if(JSON.stringify(design)===original)design=snapshot;saved=JSON.stringify(snapshot);await refresh();notice='Saved';
+   id=result.id;Object.assign(snapshot,{template_parameters:result.template_parameters??null,bundle_id:result.bundle_id??snapshot.bundle_id??null});if(JSON.stringify(design)===original)design=snapshot;saved=JSON.stringify(snapshot);await refresh();notice='Saved';
  }
- let templateDialog,templates=[],templatesLoading=false,templatesError='',templateSerial=0,templateOpening=null;
+ let templateDialog,templateBundles=[],templates=[],templatesLoading=false,templatesError='',templateSerial=0,templateOpening=null;
  let gallerySettings={};
  function currentSettings(){return {seed:design.seed,color:design.color,background:design.background,background_recipe:design.background_recipe,sample:design.sample,auto_theme:design.auto_theme,text_color:design.text_color}}
  async function showTemplates(){
@@ -255,8 +255,10 @@
    const current=++templateSerial;
    gallerySettings=currentSettings();templates=[];templatesLoading=true;templatesError='';
    try{
-     const items=await api('templates');
+     const bundles=await api('template-bundles');
+     const items=bundles.flatMap(bundle=>bundle.templates);
      if(current!==templateSerial)return;
+     templateBundles=bundles;
      templates=items.map(item=>({...item,state:'loading',html:'',source:null,error:''}));
      templatesLoading=false;
      // Render sequentially so procedural backgrounds do not compete for GPU memory.
@@ -458,12 +460,14 @@
 </dialog>
 
 <dialog class="template-dialog" bind:this={templateDialog} aria-labelledby="template-dialog-title" aria-describedby="template-dialog-help" on:cancel={()=>templateSerial++}>
-<div class="template-dialog-header"><div><h2 id="template-dialog-title">Open a template</h2><p id="template-dialog-help">Choose an original layout to start a new draft with your current data and background.</p></div><button class="icon-button" title="Close templates" aria-label="Close templates" on:click={closeTemplates}><Icon name="close"/></button></div>
+<div class="template-dialog-header"><div><h2 id="template-dialog-title">Open a template</h2><p id="template-dialog-help">Choose a bundle and an explicit layout. The seed varies spacing and typography without changing the layout.</p></div><button class="icon-button" title="Close templates" aria-label="Close templates" on:click={closeTemplates}><Icon name="close"/></button></div>
 {#if templatesLoading}<p class="gallery-status" role="status"><span class="source-spinner" aria-hidden="true"></span> Loading templates…</p>
 {:else if templatesError}<div class="gallery-status" role="alert"><p>{templatesError}</p><button on:click={showTemplates}>Try again</button></div>
 {:else if !templates.length}<p class="gallery-status">No templates available.</p>
-{:else}<div class="template-grid">
-{#each templates as item (item.id)}
+{:else}{#each templateBundles as bundle (bundle.id)}
+<section class="template-bundle" aria-labelledby={'bundle-'+bundle.id}><div class="bundle-heading"><h3 id={'bundle-'+bundle.id}>{bundle.name}</h3><p>{bundle.description}</p></div>
+<div class="template-grid">
+{#each templates.filter(item=>item.bundle_id===bundle.id) as item (item.id)}
 <button class="template-card" disabled={!!templateOpening} on:click={()=>selectTemplate(item)} aria-label={'Open '+item.name}>
 <div class="template-thumbnail">
 {#if item.state==='ready'}<div class="thumbnail-frame" style={'width:'+item.width*(Math.min(220/item.width,180/item.height))+'px;height:'+item.height*(Math.min(220/item.width,180/item.height))+'px'}><iframe title={'Preview template '+item.id} sandbox="" tabindex="-1" srcdoc={item.html} style={'width:'+item.width+'px;height:'+item.height+'px;transform:scale('+Math.min(220/item.width,180/item.height)+')'}></iframe></div>
@@ -473,7 +477,7 @@
 <div class="template-card-copy"><strong>{item.name}</strong><small>{item.kind} · {item.width} × {item.height}</small><p>{item.description}</p>{#if item.required_datasets?.length}<span class="template-requirements">Uses {item.required_datasets.join(', ')}</span>{/if}<span class="template-open-label">{templateOpening===item.id?'Opening…':'Open template '+item.id+' →'}</span></div>
 </button>
 {/each}
-</div>{/if}
+</div></section>{/each}{/if}
 </dialog>
 
 <dialog class="action-dialog" bind:this={actionDialog} aria-labelledby="action-title" aria-describedby="action-message" on:cancel={e=>{e.preventDefault();finishAction()}}>

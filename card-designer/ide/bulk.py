@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.request import urlopen
+from backend.template_variations import balanced_variants
 
 from playwright.sync_api import sync_playwright
 
@@ -13,6 +14,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--server", default="http://127.0.0.1:8765")
     parser.add_argument("--design", required=True, type=int)
+    parser.add_argument("--bundle", help="Cycle evenly through this template bundle using the saved design settings")
     parser.add_argument("--count", type=int, default=1)
     parser.add_argument("--seed", type=int, help="First seed (defaults to saved design)")
     parser.add_argument("--samples", nargs="+", help="Sample IDs to cycle through")
@@ -25,6 +27,15 @@ def main():
     samples = args.samples or [design["sample"]]
     width, height = design.get("width", 640), design.get("height", 400)
     first = design["seed"] if args.seed is None else args.seed
+    variants = {}
+    sequence = None
+    if args.bundle:
+        with urlopen(f"{args.server}/api/template-bundles/{args.bundle}") as response:
+            bundle = json.load(response)
+        sequence = balanced_variants([item['id'] for item in bundle['templates']], args.count, first)
+        for template_id in set(sequence):
+            with urlopen(f"{args.server}/api/templates/{template_id}") as response:
+                variants[template_id] = json.load(response)
     args.output.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(executable_path=os.getenv("CARD_CHROMIUM") or None)
@@ -37,6 +48,11 @@ def main():
             target = args.output / f"{i:06d}"
             if target.exists():
                 raise FileExistsError(target)
+            if sequence is not None:
+                source = variants[sequence[i]]
+                design.update({key: source[key] for key in ('template', 'css', 'width', 'height', 'template_id', 'bundle_id', 'variation_version')})
+                width, height = source['width'], source['height']
+                page.set_viewport_size({'width':width, 'height':height})
             design.update(seed=(first + i) % 2**32, sample=samples[i % len(samples)])
             rendered = engine.evaluate("d => window.cardDesignerRender(d)", design)
             html = rendered["html"]
@@ -56,6 +72,9 @@ def main():
                 stage.mkdir()
                 card.screenshot(path=str(stage / "card.png"))
                 (stage / "record.json").write_text(json.dumps(dict(design_id=args.design,
+                    bundle_id=rendered.get("context", {}).get("template_selection", {}).get("bundle_id"),
+                    template_id=rendered.get("context", {}).get("template_selection", {}).get("template_id"),
+                    template_parameters=rendered.get("context", {}).get("template_selection", {}).get("parameters"),
                     seed=design["seed"], sample=design["sample"], background=design["background"],
                     background_recipe=rendered.get("background_recipe"),
                     theme=rendered.get("context", {}).get("env", {}).get("theme", {}), elements=boxes), indent=2))

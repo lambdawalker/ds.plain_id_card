@@ -65,3 +65,5 @@
 .record-field-panel.word-wrapped pre{white-space:pre-wrap;overflow-wrap:anywhere}.settings-recipe textarea{white-space:pre}.settings-recipe textarea.wrapped{white-space:pre-wrap;overflow-wrap:anywhere}
 .dataset-tabs .drop-target{box-shadow:inset 3px 0 var(--accent)}.dataset-tabs button[draggable=true]{cursor:grab}.dataset-tabs button[draggable=true]:active{cursor:grabbing}
 .source-scroll-status{flex-shrink:0;font-size:11px}.source-scroll-status:empty{display:none}.dataset-grid-pane>.records{overscroll-behavior:contain}
+
+.bundle-heading{padding:20px 24px 0}.bundle-heading h3{padding:0 0 8px;border:0;font-size:17px}.bundle-heading p{margin:0;color:var(--muted);font-size:13px;line-height:1.5}.template-bundle+.template-bundle{border-top:1px solid var(--line)}
