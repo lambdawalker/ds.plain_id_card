@@ -1,0 +1,29 @@
+.georgia-back {
+  display: grid;
+  grid-template-columns: 15% minmax(0, 1fr);
+  gap: 28px;
+  color: #172f33;
+  background:
+    repeating-radial-gradient(ellipse at 58% 145%, #437a6b1a 0 2px, transparent 3px 8px),
+    radial-gradient(ellipse at 62% 90%, #e9b383 0, transparent 54%),
+    linear-gradient(100deg, #a9d2c2, #faf0cd 54%, #acd2c3);
+}
+.georgia-code-rail { position: relative; background: #fffffff2; border-radius: 10px; }
+.georgia-code-rail .code-image {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 580px;
+  max-width: none;
+  height: 122px;
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+.georgia-reverse { display: grid; grid-template-rows: auto 215px 1fr auto; gap: 20px; min-height: 0; }
+.georgia-reverse-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.georgia-reverse-heading h1 { font-size: 51px; letter-spacing: .06em; line-height: 1; }
+.georgia-reverse-heading p { margin-top: 8px; font-weight: 700; font-size: 20px; color: #8a4032; letter-spacing: .08em; }
+.specimen-mark { padding: 8px 15px; border: 2px solid currentColor; border-radius: 5px; color: #8a4032; letter-spacing: .1em; font-size: 23px; }
+.georgia-stacked-code { width: 100%; height: 100%; background: #fff; border-radius: 7px; padding: 12px; }
+.georgia-back-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; align-content: space-between; }
+.georgia-back-fields .field-label { color: #35564f; font-weight: 700; }
+.georgia-back-note { font-size: 16px; font-weight: 700; letter-spacing: .12em; }

@@ -1,0 +1,29 @@
+<article class="card georgia-front">
+  <header class="georgia-heading">
+    <div><h1>GEORGIA A</h1><p>DRIVING CARD · DATASET SAMPLE</p></div>
+    <strong class="specimen-mark">SPECIMEN</strong>
+  </header>
+  <main class="georgia-front-body">
+    <div class="georgia-portrait">
+      <img class="main-photo" src="{{ assets.photo }}" data-class="photo" alt="Sample portrait">
+      <span>FICTIONAL RECORD</span>
+    </div>
+    <div class="georgia-fields">
+      <div class="card-field"><span class="field-label">DOCUMENT NO.</span><strong>{{ identity.document_number or '—' }}</strong></div>
+      <div class="card-field"><span class="field-label">DATE OF BIRTH</span><strong>{{ identity.birth_date or '—' }}</strong></div>
+      <div class="card-field"><span class="field-label">CLASS</span><strong>{{ common.get('vehicle_class') or 'C' }}</strong></div>
+      <div class="card-field"><span class="field-label">EXPIRES</span><strong>{{ identity.expiry_date or '—' }}</strong></div>
+      <div class="card-field field-full georgia-name"><span class="field-label">NAME</span><strong>{{ identity.full_name or '—' }}</strong></div>
+      <div class="card-field field-full"><span class="field-label">ADDRESS</span><strong>{{ identity.address_line1 or '—' }}{% if identity.address_line2 %}<br>{{ identity.address_line2 }}{% endif %}</strong></div>
+      <div class="card-field"><span class="field-label">ISSUED</span><strong>{{ identity.issue_date or '—' }}</strong></div>
+      <div class="card-field"><span class="field-label">RESTRICTIONS</span><strong>{{ common.get('restrictions') or 'NONE' }}</strong></div>
+      <div class="georgia-traits field-full">
+        <div class="card-field"><span class="field-label">SEX</span><strong>{{ identity.sex or '—' }}</strong></div>
+        <div class="card-field"><span class="field-label">EYES</span><strong>{{ identity.eye_color or '—' }}</strong></div>
+        <div class="card-field"><span class="field-label">HEIGHT</span><strong>{{ identity.height or '—' }}</strong></div>
+        <div class="card-field"><span class="field-label">WEIGHT</span><strong>{{ identity.weight or '—' }}</strong></div>
+      </div>
+    </div>
+  </main>
+  <div class="georgia-peach" aria-hidden="true"></div>
+</article>

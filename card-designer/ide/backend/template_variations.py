@@ -9,7 +9,8 @@ SCHEMA_V1 = {'margin': [24, 32], 'font_size': [25, 28], 'label_size': [15, 17],
 
 
 TEMPLATE_IDS = ('A-left','A-right','B-left','B-right','C-top','C-bottom','D-left','D-right',
-                'E-codes-top','E-codes-bottom','F-rail-left','F-rail-right','G-photo-left','G-photo-right')
+                'E-codes-top','E-codes-bottom','F-rail-left','F-rail-right','G-photo-left','G-photo-right',
+                'GA-front','GA-back')
 
 
 def variation_schema(template_id, version=2):
