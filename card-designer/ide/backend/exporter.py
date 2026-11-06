@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from .record_files import JsonRecords, legacy_sequence
-from .export_files import class_names, expected_files, preview_instance, render_instance, renderer
+from .export_files import CAPTURE_JSON, class_names, expected_files, preview_instance, render_instance, renderer
 
 logger = logging.getLogger(__name__)
 SAFE_NAME = r"^[A-Za-z0-9][A-Za-z0-9_-]*$"
@@ -347,8 +347,9 @@ class Exporter:
                     target = folder / f"{index+1:06d}"
                     if target.exists():
                         # A restart can land between the atomic publish and the progress update.
+                        expected = expected_files(session["layouts"])
                         if (target.is_symlink() or not target.is_dir()
-                                or {path.name for path in target.iterdir()} != expected_files(session["layouts"])
+                                or {path.name for path in target.iterdir()} | {CAPTURE_JSON} != expected
                                 or any(path.is_symlink() or not path.is_file() or not path.stat().st_size
                                        for path in target.iterdir())):
                             raise ValueError(f"Incomplete existing instance {target.name}. Move it aside and resume.")
@@ -374,7 +375,10 @@ class Exporter:
         folder = self.output_folder(payload) / f"{index:06d}"
         if folder.resolve() != folder or not folder.is_dir():
             raise HTTPException(404, "Instance folder is not available")
-        return folder, expected_files(payload["layouts"])
+        filenames = expected_files(payload["layouts"])
+        if not (folder / CAPTURE_JSON).is_file():
+            filenames.remove(CAPTURE_JSON)
+        return folder, filenames
 
     def instance(self, key: int, index: int):
         folder, filenames = self.instance_path(key, index)

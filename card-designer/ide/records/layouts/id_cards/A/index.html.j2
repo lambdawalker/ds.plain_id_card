@@ -27,9 +27,9 @@
       <div class="primary-fields">
         <div class="card-field field-name">
           <span class="field-label">NAME</span>
-          <p>{{ identity.given_names or '—' }}</p>
+          <p data-capture-field="given_names">{{ identity.given_names or '—' }}</p>
           {% if identity.family_name %}
-          <p>{{ identity.family_name }}</p>
+          <p data-capture-field="surnames">{{ identity.family_name }}</p>
           {% endif %}
         </div>
         <div class="field-pair">

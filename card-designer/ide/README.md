@@ -64,6 +64,9 @@ Choose a record source, instance count, starting seed and output folder name. **
 
 Use **Preview one instance** to review the actual images, YOLO labels, and expected OCR YAML. **Start** runs the job on the Studio server. **Pause** stops after the current instance, and **Resume** continues from the last published instance. After a server restart, interrupted sessions can be resumed from the Sessions view. **Open output** lets you browse completed instances and download their files. The files are written beneath `CARD_DATA/exports` unless you set `CARD_EXPORT_ROOT`.
 
+Each newly rendered instance includes `expected-card-capture.json`. Compare that object to `extraction.data` from [Card Capture](https://github.com/lambdawalker/go.appexfission.aws.card-capture). It uses visible field values from the paired layouts, keeps dates and identifiers as strings, and writes empty strings for absent, clipped, or conflicting fields. Whitespace between visible words is represented by one space. Use `data-capture-field="given_names"` (or another Card Capture key) to explicitly tag a value in a layout. A full-name field is never split into guessed name parts. Existing instance folders can still be opened or resumed; the JSON is generated for newly rendered instances.
+
+
 ```text
 dataset/
   classes.txt

@@ -4,6 +4,7 @@ from collections import defaultdict
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import json
 import os
 import re
 
@@ -12,6 +13,45 @@ import yaml
 from .card_capture import annotation_script, capture_card
 
 BUILTIN_CLASSES = ("card", "photo", "barcode", "pdf417", "qrcode", "mrz-text")
+
+
+CAPTURE_JSON = "expected-card-capture.json"
+CAPTURE_FIELDS = (
+    "full_name", "given_names", "surnames", "birth_date", "document_number",
+    "personal_number", "address", "issue_date", "expiry_date", "issuing_country",
+)
+CAPTURE_LABELS = {
+    "name": "full_name", "first name": "given_names", "surname": "surnames",
+    "last name": "surnames", "family name": "surnames", "dob": "birth_date",
+    "date of birth": "birth_date", "document no": "document_number", "dl no": "document_number",
+    "issued": "issue_date", "expires": "expiry_date", "expiration date": "expiry_date",
+}
+
+
+def capture_expectation(layout_words):
+    candidates = defaultdict(set)
+    for words in layout_words:
+        fields = defaultdict(list)
+        clipped = set()
+        for word in words:
+            if word["role"] != "value":
+                continue
+            label = (word.get("field") or "").strip().casefold().rstrip(".")
+            key = word.get("capture_field") or CAPTURE_LABELS.get(label, label.replace(" ", "_"))
+            if key not in CAPTURE_FIELDS:
+                continue
+            if word.get("clipped"):
+                clipped.add(key)
+            fields[key].append(word["text"])
+        for key, parts in fields.items():
+            value = " ".join(parts)
+            if key not in clipped and value not in {"", "—", "–", "-"}:
+                candidates[key].add(value)
+    expected = {key: next(iter(candidates[key])) if len(candidates[key]) == 1 else ""
+                for key in CAPTURE_FIELDS}
+    if not candidates["full_name"] and expected["given_names"] and expected["surnames"]:
+        expected["full_name"] = f'{expected["given_names"]} {expected["surnames"]}'
+    return expected
 
 
 def class_names(layouts):
@@ -62,7 +102,7 @@ def renderer(origin):
 
 
 def expected_files(layouts):
-    return {"expected-ocr.yaml", *(layout["stem"] + suffix for layout in layouts for suffix in (".png", ".txt"))}
+    return {"expected-ocr.yaml", CAPTURE_JSON, *(layout["stem"] + suffix for layout in layouts for suffix in (".png", ".txt"))}
 
 
 def render_instance(capture, session, index, target):
@@ -71,6 +111,7 @@ def render_instance(capture, session, index, target):
     samples = session["samples"]
     sample = samples[index % len(samples)] if samples else ""
     result = {"instance": index + 1, "seed": seed, "sample": sample or None, "layouts": {}}
+    layout_words = []
     for layout in session["layouts"]:
         design = {**layout["design"], "seed": seed, "sample": sample}
         stem = layout["stem"]
@@ -79,6 +120,7 @@ def render_instance(capture, session, index, target):
         if measured["broken_images"]:
             raise ValueError(f"Could not load images for {stem}: {', '.join(measured['broken_images'])}")
         words = measured["words"]
+        layout_words.append(words)
         fields = defaultdict(list)
         for word in words:
             if word["field"] and word["role"] == "value":
@@ -99,6 +141,10 @@ def render_instance(capture, session, index, target):
         yaml.safe_dump(result, allow_unicode=True, sort_keys=False), encoding="utf-8"
     )
 
+    (target / CAPTURE_JSON).write_text(
+        json.dumps(capture_expectation(layout_words), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+
 
 def preview_instance(origin, session):
     with TemporaryDirectory() as directory, renderer(origin) as capture:
@@ -112,5 +158,6 @@ def preview_instance(origin, session):
                 for layout in session["layouts"]
             ],
             "ocr": (folder / "expected-ocr.yaml").read_text(encoding="utf-8"),
+            "card_capture": (folder / CAPTURE_JSON).read_text(encoding="utf-8"),
             "classes": session["classes"],
         }

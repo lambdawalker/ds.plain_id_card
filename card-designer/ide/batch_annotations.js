@@ -17,6 +17,7 @@ async root => {
         const element = node.parentElement;
         if (element.closest('style, script, template') || !visible(element)) continue;
         const field = element.closest('[data-field]')?.dataset.field;
+        const captureField = element.closest('[data-capture-field]')?.dataset.captureField;
         const labelSelector = '.field-label, label';
         let label = element.closest(labelSelector);
         for (let parent = element; !label && parent !== root; parent = parent.parentElement) {
@@ -47,7 +48,8 @@ async root => {
             const clipped = boxes.some(([left, top, right, bottom]) =>
                 left < clip[0] - 1 || top < clip[1] - 1 || right > clip[2] + 1 || bottom > clip[3] + 1);
             words.push({text: match[0], field: field ?? label?.innerText ?? null,
-                role: element.closest(labelSelector) ? 'label' : 'value', boxes, clipped});
+                role: element.closest(labelSelector) ? 'label' : 'value', boxes, clipped,
+                ...(captureField ? {capture_field: captureField} : {})});
         }
     }
     return {elements, words, fonts: [...fonts].sort(),
