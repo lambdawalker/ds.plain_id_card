@@ -294,7 +294,8 @@ def load_bundle(key):
         ids = {layout.layout_id for layout in bundle.layouts}
         if ids.intersection({None, ""}) or len(ids) != len(bundle.layouts):
             raise ValueError("Each layout must have a unique, non-empty layout_id")
-        return bundle
+        # Match the JSON API types for YAML scalars such as unquoted dates.
+        return Bundle.model_validate_json(bundle.model_dump_json())
     except FileNotFoundError as exc:
         raise HTTPException(404, "Bundle was deleted") from exc
     except (yaml.YAMLError, ValueError, OSError) as exc:

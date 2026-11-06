@@ -21,11 +21,14 @@ class BundleStorageTest(unittest.TestCase):
         key = service.create_bundle(self.bundle)["id"]
         path = self.directory / "bundles" / str(key) / "bundle.yaml"
         self.assertTrue(path.is_file())
-        path.write_text(path.read_text(encoding="utf-8").replace("Original", "Edited"), encoding="utf-8")
+        edited = path.read_text(encoding="utf-8").replace("Original", "Edited")
+        path.write_text(edited.replace("common: {}", "common: {date: 2026-11-06}"), encoding="utf-8")
         self.assertEqual(service.read_bundle(key)["layouts"][0]["template"], "<main>Edited</main>\n")
         from backend.exporter import ExportBundle
         export = ExportBundle(name="Pair", layouts=[dict(bundle_id=key, layout_id="stable-front", stem="front")])
-        self.assertEqual(service.exporter.resolve_layouts(export)[0]["design"]["template"], "<main>Edited</main>\n")
+        design = service.exporter.resolve_layouts(export)[0]["design"]
+        self.assertEqual(design["template"], "<main>Edited</main>\n")
+        self.assertEqual(design["common"]["date"], "2026-11-06")
 
     def test_migration_preserves_ids_and_deleted_ids_are_never_reused(self):
         with closing(service.database()) as db, db:
