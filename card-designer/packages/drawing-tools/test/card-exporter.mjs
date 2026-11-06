@@ -76,7 +76,7 @@ try {
   const expected = await (await page.request.get(prefix+'/expected-card-capture.json')).json();
   assert.deepEqual(expected, {
     full_name: 'Ada', given_names: '', surnames: '', birth_date: '', document_number: '',
-    personal_number: '', address: '', issue_date: '', expiry_date: '', issuing_country: ''
+    issued_identifier: '', address: '', issue_date: '', expiry_date: '', issuing_country: ''
   });
   const ocr = await (await page.request.get(prefix+'/expected-ocr.yaml')).text();
   assert.match(ocr,/front:[\s\S]*NAME: Ada[\s\S]*back:[\s\S]*NAME: Ada/);
