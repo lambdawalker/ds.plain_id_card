@@ -10,6 +10,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.request import Request, urlopen
 from batch_manifest import atomic_write, digest, json_bytes, report, verified_record
+from backend.card_capture import capture_card
 from backend.template_variations import balanced_variants
 
 from playwright.sync_api import sync_playwright
@@ -133,12 +134,7 @@ def run(args, bundle, first, sequence):
 
 def render_sample(engine, page, design, plan, annotations, target, saved_bundle_id):
     width, height = design.get("width", 640), design.get("height", 400)
-    page.set_viewport_size({"width": width, "height": height})
-    rendered = engine.evaluate("d => window.cardDesignerRender(d, {scale: 1, pixelRatio: 1})", design)
-    page.set_content(f'<iframe sandbox="" style="display:block;border:0;width:{width}px;height:{height}px"></iframe><style>body{{margin:0}}</style>')
-    page.locator("iframe").evaluate("(frame, html) => frame.srcdoc = html", rendered["html"])
-    card = page.frame_locator("iframe").locator("#view-port")
-    card.wait_for()
+    rendered, card = capture_card(engine, page, design)
     measured = card.evaluate(annotations)
     context = rendered.get("context", {})
     selection = context.get("template_selection", {})

@@ -4,6 +4,8 @@
  import {copyCardImage} from './copy-image.js';
  import {formatOutput} from './format-output.js';
  import Editor from './Editor.svelte';
+ import CardExporter from './CardExporter.svelte';
+ let workspace='designer', exporterOpened=false;
  import Icon from './Icon.svelte';
  import {api,renderCard,backgroundRecipe} from './render.js';
  import {starter} from './starter.js';
@@ -322,7 +324,13 @@
  async function save(){
    if(!id||!bundleName.trim())return;
    const snapshot=snapshotBundle();
-   await api('bundles/'+id,'PUT',await prepareSnapshot(snapshot));
+   const updated=await api('bundles/'+id,'PUT',await prepareSnapshot(snapshot));
+   // Keep the server-assigned IDs when a newly added layout is saved again.
+   previewTabs=previewTabs.map((tab,index)=>({
+     ...tab,design:{...tab.design,layout_id:updated.layouts[index].layout_id}
+   }));
+   design={...design,layout_id:previewTabs.find(tab=>tab.key===activePreviewId).design.layout_id};
+   snapshot.layouts.forEach((layout,index)=>layout.layout_id=updated.layouts[index].layout_id);
    saved=JSON.stringify(snapshot);
    await refresh();
    notice='Bundle saved';
@@ -388,9 +396,9 @@
      }catch(e){if(current===serial){error=e.message;rememberPreview()}}
    },140)
  }
- $: if(ready&&id)schedule({...design},scale);
+ $: if(ready&&id&&workspace==='designer')schedule({...design},scale);
  function key(e){
-   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){
+   if(workspace==='designer'&&(e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){
      e.preventDefault();if(!actionDialog?.open)act(save);
    }
  }
@@ -416,12 +424,17 @@
 </script>
 <svelte:window on:resize={positionSettings} on:keydown={key} on:beforeunload={e=>{if(ready&&dirty){e.preventDefault();e.returnValue=''}}}/>
 <header class="top"><strong><i>▧</i> Card Designer</strong><span class="tag">STUDIO</span>
+<button class:active={workspace==='designer'} aria-pressed={workspace==='designer'} disabled={busy} on:click={()=>workspace='designer'}>Designer</button>
+<button class:active={workspace==='exporter'} aria-pressed={workspace==='exporter'} disabled={busy} on:click={()=>{workspace='exporter';exporterOpened=true;}}>Card Exporter</button>
+{#if workspace==='designer'}
 <button class="icon-button" title="New bundle" aria-label="New bundle" disabled={busy} on:click={()=>act(newBundle)}><Icon name="new"/></button>
 <button class="icon-button open-templates" title="Open bundles" aria-label="Open bundles" disabled={busy} on:click={showTemplates}><Icon name="open"/></button>
 <button class="icon-button" title="Clone bundle" aria-label="Clone bundle" disabled={busy||!id||!bundleName.trim()} on:click={()=>act(clone)}><Icon name="clone"/></button>
 <button class="primary icon-button" title="Save bundle (Ctrl+S)" aria-label="Save bundle" disabled={busy||!id||!bundleName.trim()} on:click={()=>act(save)}><Icon name="save"/></button>
 <button class="icon-button" title="Delete bundle" aria-label="Delete bundle" disabled={busy||!id} on:click={()=>act(remove)}><Icon name="delete"/></button>
-<span class="grow"></span><label>Theme <select bind:value={theme}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label></header>
+{/if}<span class="grow"></span><label>Theme <select bind:value={theme}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label></header>
+{#if exporterOpened}<div class="export-shell" hidden={workspace!=='exporter'}><CardExporter active={workspace==='exporter'}/></div>{/if}
+{#if workspace==='designer'}
 {#if id}
 <div class="toolbar"><label>Bundle <input bind:value={bundleName} maxlength="160" disabled={busy||!id}></label>
 <label>Layout <input bind:value={design.name} maxlength="160" disabled={busy||!id}></label>
@@ -566,3 +579,5 @@
 {#if actionKind==='name'}<label for="new-bundle-name">Bundle name</label><input id="new-bundle-name" bind:value={actionValue} required maxlength="160">{/if}
 <div class="dialog-actions"><button type="button" on:click={()=>finishAction()}>{actionKind==='discard'?'Keep editing':'Cancel'}</button><button class:danger={actionKind!=='name'} class:primary={actionKind==='name'} disabled={actionKind==='name'&&!actionValue.trim()}>{actionLabel}</button></div>
 </form></dialog>
+
+{/if}

@@ -33,6 +33,33 @@ The dataset browser starts empty until real sources are connected. To browse rea
 
 The API indexes JPEG, PNG and WebP files recursively at startup. The filename stem is the display name and the relative path determines a stable record ID. Select a record in **Data sources**; its ID and photo URL appear in Context. Restart the server after adding files. Open the gear-shaped **Background settings** panel and use **Artwork** to import a separate background. SQLite and imported artwork live under data/; set CARD_DATA to relocate them.
 
+## Card Exporter
+
+Open **Card Exporter** in the top bar. In **Export bundles**, add layouts from any saved Designer bundle, give each a unique output name such as `front` or `back`, and order the layouts. Save the pairing, then choose **New session**. Each session stores its own layout snapshot, seed, record order and output folder. Editing the pairing or the original layouts affects future sessions.
+
+Install the Chromium renderer once before previewing or running a session. From this directory on Windows:
+
+    uv run --no-project --python 3.12 --with-requirements requirements.txt python -m playwright install chromium
+
+On macOS or Linux, run `.venv/bin/python -m playwright install chromium` with the Studio environment. Set `CARD_CHROMIUM` to use an existing Chromium binary. Run Studio with one Uvicorn worker so session progress and pause controls share the same worker registry.
+
+Choose a record source, instance count, starting seed and output folder name. **Seed only** is useful for layouts that don't require a dataset. Dataset sessions use a seeded ordering of the selected record IDs and cycle when the count exceeds the source size. All layouts in each instance use the same record and seed. Keep source assets connected and stable during the session.
+
+Use **Preview one instance** to review the actual images, YOLO labels, and expected OCR YAML. **Start** runs the job on the Studio server. **Pause** stops after the current instance, and **Resume** continues from the last published instance. After a server restart, interrupted sessions can be resumed from the Sessions view. **Open output** lets you browse completed instances and download their files. The files are written beneath `CARD_DATA/exports` unless you set `CARD_EXPORT_ROOT`.
+
+```text
+dataset/
+  classes.txt
+  000001/
+    front.png
+    front.txt
+    back.png
+    back.txt
+    expected-ocr.yaml
+```
+
+YOLO files contain normalized `class x_center y_center width height` rows. Class IDs are the zero-based line numbers in `classes.txt`. Clean renders include a whole-card box and boxes for annotated elements. Use literal `data-class` names on custom elements to include them in the session class map. The YAML stores the expected fields, visible text, and word boxes keyed by output name. It also reports missing dataset assets when a layout renders a placeholder.
+
 ## Render a batch
 Save a bundle and read its numeric ID from the status bar. With the server running, open a second terminal in this directory. On Windows:
 

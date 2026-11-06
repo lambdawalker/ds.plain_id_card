@@ -6,6 +6,7 @@ from hashlib import sha256
 import random
 import sqlite3
 import secrets
+from uuid import uuid4
 from contextlib import closing, asynccontextmanager, contextmanager
 from concurrent.futures import Future, TimeoutError as FutureTimeout
 from queue import Queue, Empty
@@ -20,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from jinja2 import StrictUndefined, TemplateError
 from jinja2.sandbox import SandboxedEnvironment
 from .path_resolver import resolve
+from .exporter import Exporter
 from threading import RLock, Thread, Event
 from .photo_dataset import metadata, photo_index
 from .legacy import sample_template
@@ -36,6 +38,7 @@ DB = DATA / "designs.sqlite"
 @asynccontextmanager
 async def lifespan(app):
     global dataset_loading, dataset_load_error, active_loader_stop, catalog
+    exporter.initialize()
     stop = Event()
     active_loader_stop = stop
     dataset_loading, dataset_load_error = True, ""
@@ -81,6 +84,7 @@ class Design(BaseModel):
     height: int = Field(default=400, ge=160, le=4096)
     auto_theme: bool = False
     text_color: str = Field(default="#000000", pattern=r"^#[0-9a-fA-F]{6}$")
+    layout_id: str | None = Field(default=None, max_length=64)
     template_id: str | None = None
     bundle_id: str | None = None
     variation_version: int = 1
@@ -162,9 +166,24 @@ def upgrade_stock_layouts(db):
     db.execute("PRAGMA user_version = 1")
 
 
+def assign_layout_ids(bundle):
+    seen = set()
+    for layout in bundle.layouts:
+        if not layout.layout_id or layout.layout_id in seen:
+            layout.layout_id = uuid4().hex
+        seen.add(layout.layout_id)
+
+
 with closing(database()) as db, db:
     initialize_bundles(db)
     upgrade_stock_layouts(db)
+    if db.execute("PRAGMA user_version").fetchone()[0] < 2:
+        for key, payload in db.execute("SELECT id,payload FROM bundle").fetchall():
+            bundle = Bundle.model_validate_json(payload)
+            assign_layout_ids(bundle)
+            db.execute("UPDATE bundle SET payload=? WHERE id=?", (bundle.model_dump_json(), key))
+        db.execute("PRAGMA user_version=2")
+
 
 
 def load_bundle(db, key):
@@ -179,6 +198,7 @@ def bundle_response(key, bundle):
 
 
 def prepare_bundle(bundle):
+    assign_layout_ids(bundle)
     bundle.layouts = [prepare_design(layout) for layout in bundle.layouts]
     return bundle
 
@@ -627,6 +647,9 @@ def preview(request: Preview):
         person = {key: person[key] for key in ("id", "record_id", "name", "dataset", "source_id", "photo_url") if key in person}
     return {**result, "person": person, "context": context_summary}
 
+
+exporter = Exporter(database, load_bundle, lambda: catalog, Path(os.getenv("CARD_EXPORT_ROOT", DATA / "exports")))
+app.include_router(exporter.router)
 
 app.mount("/backgrounds", StaticFiles(directory=ROOT.parent / "backgrounds"))
 app.mount("/", StaticFiles(directory=ROOT / "web/dist", html=True))
