@@ -22,8 +22,8 @@ class TemplateBundleTest(unittest.TestCase):
             service.open_bundle('../invalid')
 
     def test_every_gallery_template_has_fixed_layout_and_no_synthetic_fields(self):
-        self.assertEqual(len(service.list_template_bundles()),7)
-        self.assertEqual(len(service.list_templates()),14)
+        self.assertEqual(len(service.list_template_bundles()),8)
+        self.assertEqual(len(service.list_templates()),16)
         for item in service.list_templates():
             source=service.open_template(item['id'])
             self.assertTrue(source['layout'])

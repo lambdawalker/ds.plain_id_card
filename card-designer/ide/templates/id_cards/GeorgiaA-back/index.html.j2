@@ -1,0 +1,20 @@
+<article class="card georgia-back">
+  <aside class="georgia-code-rail">
+    <img class="code-image" src="{{ assets.barcode }}" data-class="barcode" alt="Dataset linear barcode">
+  </aside>
+  <main class="georgia-reverse">
+    <header class="georgia-reverse-heading">
+      <div><h1>GEORGIA A</h1><p>DRIVING CARD · DATASET SAMPLE</p></div>
+      <strong class="specimen-mark">SPECIMEN</strong>
+    </header>
+    <img class="georgia-stacked-code code-image" src="{{ assets.pdf417 }}" data-class="pdf417" alt="Dataset PDF417 image">
+    <div class="georgia-back-fields">
+      <div class="card-field field-full"><span class="field-label">MEDICAL INFORMATION</span><strong>{{ common.get('medical_information') or 'NONE' }}</strong></div>
+      <div class="card-field"><span class="field-label">CLASS</span><strong>{{ common.get('vehicle_class') or 'C' }}</strong></div>
+      <div class="card-field"><span class="field-label">ENDORSEMENTS</span><strong>{{ common.get('endorsements') or 'NONE' }}</strong></div>
+      <div class="card-field"><span class="field-label">RESTRICTIONS</span><strong>{{ common.get('restrictions') or 'NONE' }}</strong></div>
+      <div class="card-field"><span class="field-label">DATE OF BIRTH</span><strong>{{ identity.birth_date or '—' }}</strong></div>
+    </div>
+    <p class="georgia-back-note">FICTIONAL RECORD · NOT VALID FOR IDENTIFICATION</p>
+  </main>
+</article>

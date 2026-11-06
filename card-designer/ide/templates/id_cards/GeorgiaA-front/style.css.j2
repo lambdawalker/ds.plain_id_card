@@ -1,0 +1,33 @@
+.georgia-front {
+  color: #172f33;
+  background:
+    repeating-radial-gradient(ellipse at 75% -36%, #366e6618 0 2px, transparent 3px 8px),
+    linear-gradient(115deg, #a6d0c1, #f7edcc 55%, #b3d4c2);
+}
+.georgia-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 24px;
+  z-index: 1;
+}
+.georgia-heading h1 { font-size: 65px; letter-spacing: .07em; line-height: 1; }
+.georgia-heading p { margin-top: 8px; font-weight: 700; color: #8a4032; font-size: 21px; letter-spacing: .08em; }
+.specimen-mark { padding: 8px 15px; border: 2px solid currentColor; border-radius: 5px; color: #8a4032; letter-spacing: .1em; font-size: 23px; }
+.georgia-front-body {
+  display: grid;
+  grid-template-columns: 28% minmax(0, 1fr);
+  gap: 28px;
+  flex: 1;
+  min-height: 0;
+  z-index: 1;
+}
+.georgia-portrait { display: flex; flex-direction: column; min-height: 0; gap: 10px; }
+.georgia-portrait .main-photo { width: 100%; flex: 1; min-height: 0; border-radius: 10px; }
+.georgia-portrait span { font-size: 16px; font-weight: 700; letter-spacing: .1em; }
+.georgia-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 22px; align-content: space-between; }
+.georgia-fields .field-label { color: #35564f; font-weight: 700; }
+.georgia-name strong { font-size: 1.35em; }
+.georgia-traits { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.georgia-peach { position: absolute; right: -50px; bottom: -150px; width: 520px; height: 520px; border-radius: 48%; background: radial-gradient(ellipse at 30% 25%, #f7d396, #d36f5f); opacity: .32; transform: rotate(-18deg); }
+.georgia-peach::before { content: ""; position: absolute; width: 180px; height: 76px; left: 120px; top: -22px; border-radius: 90% 0; background: #498f70; }

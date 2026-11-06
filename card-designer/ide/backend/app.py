@@ -132,12 +132,16 @@ def initialize_bundles(db):
             layout = Design.model_validate_json(row[0])
             insert_bundle(db, Bundle(name=layout.name if layout.name.strip() else "Imported bundle", layouts=[layout]))
     for bundle in template_bundles():
-        layouts = [
-            Design(**template_source(item["id"]), seed=42, color="#a4d5c8",
-                   background="type-b", auto_theme=True)
-            for item in bundle["templates"]
-        ]
-        insert_bundle(db, Bundle(name=bundle["name"], layouts=layouts))
+        install_stock_bundle(db, bundle)
+
+
+def install_stock_bundle(db, bundle):
+    defaults = {"seed": 42, "color": "#a4d5c8", "background": "type-b", "auto_theme": True,
+                **bundle.get("defaults", {})}
+    layouts = [Design(**template_source(item["id"]), **defaults) for item in bundle["templates"]]
+    saved = Bundle(name=bundle["name"], layouts=layouts)
+    assign_layout_ids(saved)
+    return insert_bundle(db, saved)
 
 
 def upgrade_stock_layouts(db):
@@ -183,6 +187,14 @@ with closing(database()) as db, db:
             assign_layout_ids(bundle)
             db.execute("UPDATE bundle SET payload=? WHERE id=?", (bundle.model_dump_json(), key))
         db.execute("PRAGMA user_version=2")
+    if db.execute("PRAGMA user_version").fetchone()[0] < 3:
+        installed = db.execute(
+            "SELECT 1 FROM bundle, json_each(bundle.payload, '$.layouts') AS layout "
+            "WHERE json_extract(layout.value, '$.template_id') = 'GA-front' LIMIT 1"
+        ).fetchone()
+        if installed is None:
+            install_stock_bundle(db, next(item for item in template_bundles() if item["id"] == "georgia-a"))
+        db.execute("PRAGMA user_version=3")
 
 
 

@@ -103,3 +103,21 @@ bundles:
     folder: G
     layout: portrait-right
     variation_version: 2
+- id: georgia-a
+  name: Georgia A
+  description: Paired Georgia-inspired front and back specimens.
+  defaults:
+    color: "#e2eddb"
+    background: plain
+    auto_theme: false
+  templates:
+  - id: GA-front
+    name: Georgia A · Front
+    folder: GeorgiaA-front
+    layout: front
+    variation_version: 2
+  - id: GA-back
+    name: Georgia A · Back
+    folder: GeorgiaA-back
+    layout: back
+    variation_version: 2
