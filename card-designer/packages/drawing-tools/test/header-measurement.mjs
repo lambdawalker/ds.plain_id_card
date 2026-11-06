@@ -33,15 +33,18 @@ try{
  assert.deepEqual(result.larger,result.zoomed);
  assert.deepEqual(result.pixels,Array(3).fill([51,102,153,255]));
  assert.equal(result.noHeader,undefined);assert.equal(result.scriptRan,false);assert.equal(result.frames,0);assert.equal(result.invalid,true);
- const created=await page.request.post(base+'/api/designs',{data:result.design});designId=(await created.json()).id;
- await page.reload();await page.getByLabel('Open design',{exact:true}).selectOption(String(designId));
+ const created=await page.request.post(base+'/api/bundles',{data:{name:'Header test bundle',layouts:[result.design]}});designId=(await created.json()).id;
+ await page.reload();
+ await page.getByRole('button',{name:'Open bundles',exact:true}).click();
+ await page.getByRole('button',{name:'Open bundle Header test bundle',exact:true}).click();
+ await page.getByRole('dialog',{name:'Open a bundle'}).waitFor({state:'hidden'});
  const frame=page.frameLocator('iframe[title="Card preview"]');await frame.locator('h1').waitFor();
- async function save(){const response=page.waitForResponse(r=>r.url()===base+'/api/designs/'+designId&&r.request().method()==='PUT');await page.getByRole('button',{name:'Save design',exact:true}).click();assert.ok((await response).ok());await page.getByRole('button',{name:'Save design',exact:true}).waitFor({state:'visible'});await page.waitForFunction(()=>!document.querySelector('button[aria-label="Save design"]').disabled);return (await page.request.get(base+'/api/designs/'+designId)).json()}
- const saved=await save();assert.deepEqual(saved.background_recipe.header_layout.bounds,result.bounds);
+ async function save(){const response=page.waitForResponse(r=>r.url()===base+'/api/bundles/'+designId&&r.request().method()==='PUT');await page.getByRole('button',{name:'Save bundle',exact:true}).click();assert.ok((await response).ok());await page.getByRole('button',{name:'Save bundle',exact:true}).waitFor({state:'visible'});await page.waitForFunction(()=>!document.querySelector('button[aria-label="Save bundle"]').disabled);return (await page.request.get(base+'/api/bundles/'+designId)).json()}
+ const saved=await save();assert.deepEqual(saved.layouts[0].background_recipe.header_layout.bounds,result.bounds);
  const css=page.getByRole('textbox',{name:'CSS source',exact:true});await css.fill(result.design.css.replace('32px','42px'));
- const changed=await save();assert.ok(changed.background_recipe.header_layout.bounds.bottom>saved.background_recipe.header_layout.bounds.bottom);
+ const changed=await save();assert.ok(changed.layouts[0].background_recipe.header_layout.bounds.bottom>saved.layouts[0].background_recipe.header_layout.bounds.bottom);
  const download=page.waitForEvent('download');await page.getByRole('button',{name:'Download card PNG',exact:true}).click();await(await download).saveAs('/tmp/measured-header-download.png');
  const editor=page.getByRole('textbox',{name:'Template source',exact:true});await editor.fill('{% broken %}');await save();
  console.log('PASS: saved geometry follows edited text; PNG downloads render measured headers; invalid source still saves.');
  console.log('PASS: text-first measurement follows wrapping/font changes, refits stale recipes, covers square/curved/wavy headers, ignores zoom, blocks scripts, and cleans up measurement frames.');
-}finally{if(designId)await page.request.delete(base+'/api/designs/'+designId);await browser.close()}
+}finally{if(designId)await page.request.delete(base+'/api/bundles/'+designId);await browser.close()}

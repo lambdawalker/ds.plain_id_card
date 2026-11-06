@@ -19,17 +19,37 @@ class ReplayTest(unittest.TestCase):
         self.assertNotEqual(original, render(43))
         self.assertEqual(original, render(42))
 
-    def test_clone_is_independent(self):
+    def test_bundle_crud_and_clone_are_atomic_and_independent(self):
+        with tempfile.TemporaryDirectory() as temp, patch.object(service, "DB", Path(temp) / "test.db"):
+            with service.database() as db:
+                db.execute("CREATE TABLE bundle(id INTEGER PRIMARY KEY, payload TEXT NOT NULL)")
+            bundle = service.Bundle(name="Test bundle", layouts=[self.design, self.design])
+            original = service.create_bundle(bundle)["id"]
+            draft = bundle.model_copy(deep=True)
+            draft.layouts[1].seed = 9
+            copy = service.clone_bundle(original, draft)["id"]
+            self.assertEqual(service.read_bundle(original)["layouts"][1]["seed"], 42)
+            self.assertEqual(service.read_bundle(copy)["layouts"][1]["seed"], 9)
+            service.update_bundle(original, draft)
+            self.assertEqual(service.read_bundle(original)["layouts"][1]["seed"], 9)
+            service.delete_bundle(copy)
+            self.assertEqual(service.list_bundles(), [{"id": original, "name": "Test bundle", "layout_count": 2}])
+
+    def test_existing_design_migrates_once_and_deleted_bundle_stays_deleted(self):
         with tempfile.TemporaryDirectory() as temp, patch.object(service, "DB", Path(temp) / "test.db"):
             with service.database() as db:
                 db.execute("CREATE TABLE design(id INTEGER PRIMARY KEY, payload TEXT NOT NULL)")
-            original = service.create(self.design)["id"]
-            copy = service.clone(original)["id"]
-            service.update(copy, self.design.model_copy(update={"seed": 9}))
-            self.assertEqual(service.read(original).seed, 42)
-            self.assertEqual(service.read(copy).seed, 9)
-            service.delete(copy)
-            self.assertEqual(service.designs(), [{"id": original, "name": "Test"}])
+                db.execute("INSERT INTO design(payload) VALUES (?)", (self.design.model_dump_json(),))
+            with service.database() as db:
+                service.initialize_bundles(db)
+            migrated = service.list_bundles()[0]["id"]
+            self.assertEqual(service.read_bundle(migrated)["layouts"][0]["template"], self.design.template)
+            self.assertTrue(any(row["layout_count"] == 2 for row in service.list_bundles()))
+            service.delete_bundle(migrated)
+            remaining = service.list_bundles()
+            with service.database() as db:
+                service.initialize_bundles(db)
+            self.assertEqual(service.list_bundles(), remaining)
 
     def test_legacy_a_renders(self):
         design = self.design.model_copy(update=service.sample_template())

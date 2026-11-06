@@ -41,38 +41,26 @@ def resolved_inputs(server, design, asset_cache):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--server", default="http://127.0.0.1:8765")
-    parser.add_argument("--design", required=True, type=int)
-    parser.add_argument("--bundle", help="Cycle evenly through this template bundle using the saved design settings")
+    parser.add_argument("--bundle", required=True, type=int, help="Numeric ID of a saved bundle")
     parser.add_argument("--count", type=int, default=1)
-    parser.add_argument("--seed", type=int, help="First seed (defaults to saved design)")
+    parser.add_argument("--seed", type=int, help="First seed (defaults to the first saved layout)")
     parser.add_argument("--samples", nargs="+", help="Sample IDs to cycle through")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--resume", action="store_true", help="Reuse verified samples from this exact run")
     args = parser.parse_args()
     if args.count < 1 or args.seed is not None and not 0 <= args.seed < 2**32:
         parser.error("Expected a positive count and an unsigned 32-bit seed")
-    with urlopen(f"{args.server}/api/designs/{args.design}") as response:
-        design = json.load(response)
-    samples = args.samples or [design["sample"]]
-    width, height = design.get("width", 640), design.get("height", 400)
-    first = design["seed"] if args.seed is None else args.seed
-    variants = {}
-    sequence = None
-    if args.bundle:
-        with urlopen(f"{args.server}/api/template-bundles/{args.bundle}") as response:
-            bundle = json.load(response)
-        sequence = balanced_variants([item['id'] for item in bundle['templates']], args.count, first)
-        for template_id in set(sequence):
-            with urlopen(f"{args.server}/api/templates/{template_id}") as response:
-                variants[template_id] = json.load(response)
+    bundle = json.loads(fetch(args.server, f"/api/bundles/{args.bundle}"))
+    first = bundle["layouts"][0]["seed"] if args.seed is None else args.seed
+    sequence = balanced_variants(list(range(len(bundle["layouts"]))), args.count, first)
     args.output.mkdir(parents=True, exist_ok=True)
     # SQLite releases the run lock automatically if the process is interrupted.
     with closing(sqlite3.connect(args.output / ".batch-lock.sqlite", timeout=0)) as lock:
         lock.execute("BEGIN EXCLUSIVE")
-        run(args, design, samples, first, variants, sequence)
+        run(args, bundle, first, sequence)
 
 
-def run(args, design, samples, first, variants, sequence):
+def run(args, bundle, first, sequence):
     output = args.output
     manifest_path = output / "manifest.json"
     if manifest_path.exists() != args.resume:
@@ -82,21 +70,18 @@ def run(args, design, samples, first, variants, sequence):
     designs = []
     plans = []
     asset_cache = {}
-    for index in range(args.count):
-        item = dict(design)
-        if sequence is not None:
-            source = variants[sequence[index]]
-            item.update({key: source[key] for key in (
-                "template", "css", "width", "height", "template_id", "bundle_id", "variation_version"
-            )})
-        item.update(seed=(first + index) % 2**32, sample=samples[index % len(samples)])
+    for index, layout_index in enumerate(sequence):
+        item = dict(bundle["layouts"][layout_index])
+        item["seed"] = (first + index) % 2**32
+        if args.samples:
+            item["sample"] = args.samples[index % len(args.samples)]
         designs.append(item)
         try:
             inputs = resolved_inputs(args.server, item, asset_cache)
         except (OSError, ValueError) as error:
             raise SystemExit(f"Preflight failed at sample {index} ({item['sample']}): {error}") from error
         plans.append({"index": index, "seed": item["seed"], "sample": item["sample"],
-                      "template_id": item.get("template_id"), **inputs})
+                      "layout_index": layout_index, "template_id": item.get("template_id"), **inputs})
 
     annotations = Path(__file__).with_name("batch_annotations.js").read_text(encoding="utf-8")
     with sync_playwright() as playwright:
@@ -113,8 +98,7 @@ def run(args, design, samples, first, variants, sequence):
             if not response.ok:
                 raise RuntimeError(f"Could not fingerprint renderer asset {url}")
             static[url] = digest(response.body())
-        manifest = {"version": 1, "design_id": args.design, "design": design,
-                    "bundle": args.bundle, "variants": variants, "plans": plans,
+        manifest = {"version": 2, "bundle": bundle, "plans": plans,
                     "browser": browser.version, "platform": platform.platform(), "renderer": static,
                     "exporter_sha256": digest(Path(__file__).read_bytes()),
                     "annotations_sha256": digest(annotations.encode()),
@@ -136,7 +120,7 @@ def run(args, design, samples, first, variants, sequence):
                     if record is None:
                         raise ValueError("Existing sample failed integrity verification. Move it aside and resume.")
                 else:
-                    record = render_sample(engine, page, item, plan, annotations, target, args.design)
+                    record = render_sample(engine, page, item, plan, annotations, target, args.bundle)
                 records.append((index, record))
             except Exception as error:
                 failures.append({"index": index, "sample": plan["sample"], "error": str(error)})
@@ -147,7 +131,7 @@ def run(args, design, samples, first, variants, sequence):
         raise SystemExit(1)
 
 
-def render_sample(engine, page, design, plan, annotations, target, design_id):
+def render_sample(engine, page, design, plan, annotations, target, saved_bundle_id):
     width, height = design.get("width", 640), design.get("height", 400)
     page.set_viewport_size({"width": width, "height": height})
     rendered = engine.evaluate("d => window.cardDesignerRender(d, {scale: 1, pixelRatio: 1})", design)
@@ -177,7 +161,8 @@ def render_sample(engine, page, design, plan, annotations, target, design_id):
         stage = Path(temp) / "sample"
         stage.mkdir()
         image = card.screenshot(path=str(stage / "card.png"), animations="disabled")
-        record = dict(design_id=design_id, bundle_id=selection.get("bundle_id"),
+        record = dict(bundle_id=saved_bundle_id, layout_index=plan["layout_index"],
+                      layout_name=design["name"], template_bundle_id=selection.get("bundle_id"),
                       template_id=selection.get("template_id"),
                       template_parameters=selection.get("parameters"),
                       seed=plan["seed"], sample=plan["sample"], background=design["background"],

@@ -8,13 +8,13 @@
  import {api,renderCard,backgroundRecipe} from './render.js';
  import {starter} from './starter.js';
  import {themedDesign} from './color-theme.js';
- let design=themedDesign({...starter}), designs=[], id=null, saved='', ready=false, busy=false;
+ let design=themedDesign({...starter}), bundles=[], id=null, bundleName='', saved='', ready=false, busy=false;
  let copying=false,previewWidth=640,previewHeight=400;
  async function copyImage(){if(copying||!preview)return;copying=true;try{await copyCardImage(preview,previewWidth,previewHeight);notice='Card image copied'}catch(e){notice='Could not copy image: '+e.message}finally{copying=false}}
  let preview='',output='',renderedCSS='',context={},error='',notice='';
  let previewTabs=[],activePreviewId='',previewCounter=0;
  async function downloadCards(bundle=false){
-   if(busy||templateOpening)return;
+   if(busy)return;
    rememberPreview();
    const snapshots=(bundle?previewTabs:[previewTabs.find(tab=>tab.key===activePreviewId)]).map(tab=>structuredClone(tab.design));
    await act(async()=>{
@@ -24,12 +24,12 @@
        const blob=await renderedPNG(item,renderCard);
        files.push({name:downloadName(item.template_id||item.name)+'-'+(index+1)+'.png',blob});
      }
-     if(bundle)saveBlob(await zipFiles(files),downloadName(snapshots[0].bundle_name||'Card bundle')+'.zip');
+     if(bundle)saveBlob(await zipFiles(files),downloadName(bundleName||'Card bundle')+'.zip');
      else saveBlob(files[0].blob,downloadName(snapshots[0].name)+'.png');
      notice=bundle?'Bundle downloaded':'Card downloaded';
    });
  }
- function previewState(){return {design:structuredClone(design),id,saved,preview,output,renderedCSS,context:structuredClone(context),error,previewWidth,previewHeight}}
+ function previewState(){return {design:structuredClone(design),preview,output,renderedCSS,context:structuredClone(context),error,previewWidth,previewHeight}}
  function rememberPreview(){
    const state=previewState();
    if(!activePreviewId){activePreviewId='preview-'+(++previewCounter);previewTabs=[{key:activePreviewId,...state}]}
@@ -37,30 +37,54 @@
  }
  function restorePreview(tab){
    serial++;randomSerial++;randomizing=false;
-   activePreviewId=tab.key;design=structuredClone(tab.design);id=tab.id;saved=tab.saved;
+   activePreviewId=tab.key;design=structuredClone(tab.design);
    preview=tab.preview;output=tab.output;renderedCSS=tab.renderedCSS;context=structuredClone(tab.context);error=tab.error;
    previewWidth=tab.previewWidth;previewHeight=tab.previewHeight;notice='';
  }
- function switchPreview(key){if(key===activePreviewId||busy||templateOpening)return;rememberPreview();const tab=previewTabs.find(tab=>tab.key===key);if(tab)restorePreview(tab)}
+ function switchPreview(key){if(key===activePreviewId||busy)return;rememberPreview();const tab=previewTabs.find(tab=>tab.key===key);if(tab)restorePreview(tab)}
  function previewTabKey(e,index){
    if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
    e.preventDefault();const next=e.key==='Home'?0:e.key==='End'?previewTabs.length-1:(index+(e.key==='ArrowRight'?1:-1)+previewTabs.length)%previewTabs.length;
    switchPreview(previewTabs[next].key);document.getElementById(previewTabs[next].key)?.focus();
  }
- function hasUnsavedPreviews(){return dirty||previewTabs.some(tab=>tab.key!==activePreviewId&&JSON.stringify(tab.design)!==tab.saved)}
+ function bundlePayload(name, tabs, active, current){
+   return {name, layouts:tabs.map(tab=>tab.key===active?current:tab.design)};
+ }
+ function snapshotBundle(){
+   return structuredClone(bundlePayload(bundleName,previewTabs,activePreviewId,design));
+ }
+ function layoutTab(layout){
+   return {key:'preview-'+(++previewCounter),design:layout,preview:'',output:'',renderedCSS:'',
+     context:{},error:'',previewWidth:layout.width||640,previewHeight:layout.height||400};
+ }
+ function installBundle(bundle){
+   id=bundle?.id??null;
+   bundleName=bundle?.name??'';
+   const layouts=(bundle?.layouts??[{...starter}]).map(themedDesign);
+   previewTabs=layouts.map(layoutTab);
+   restorePreview(previewTabs[0]);
+   saved=JSON.stringify(snapshotBundle());
+ }
  async function openBundle(bundle){
-   if(templateOpening||busy)return;templateOpening=bundle.id;
-   try{
-     if(hasUnsavedPreviews()&&await askAction('discard','Unsaved changes','Replace all open preview tabs? Unsaved changes in those tabs will be discarded.','Discard changes')!==true)return;
-     randomSerial++;randomizing=false;
-     const settings=structuredClone(currentSettings());
-     const sources=await Promise.all(bundle.templates.map(item=>api('templates/'+encodeURIComponent(item.id))));
-     const drafts=sources.map(source=>{const cached=templates.find(item=>item.id===source.id)?.render;
-       return {key:'preview-'+(++previewCounter),design:{...starter,...source,...settings},id:null,saved:JSON.stringify(starter),preview:cached?.html||'',output:cached?.template||'',renderedCSS:cached?.css||'',context:cached?.context||{},error:'',previewWidth:source.width,previewHeight:source.height};
-     });
-     previewTabs=drafts;restorePreview(drafts[0]);closeTemplates();
-   }catch(e){templatesError=e.message}
-   finally{templateOpening=null}
+   if(busy)return;
+   await act(async()=>{
+     if(!await canLeave())return;
+     await open(bundle.id);
+     closeTemplates();
+   });
+ }
+ function addLayout(){
+   rememberPreview();
+   const tab=layoutTab(themedDesign({...starter,name:'Layout '+(previewTabs.length+1)}));
+   previewTabs=[...previewTabs,tab];
+   restorePreview(tab);
+ }
+ async function removeLayout(){
+   if(previewTabs.length<2)return;
+   if(!await askAction('delete','Remove layout','Remove “'+design.name+'” from this bundle?','Remove layout'))return;
+   const index=previewTabs.findIndex(tab=>tab.key===activePreviewId);
+   previewTabs=previewTabs.filter(tab=>tab.key!==activePreviewId);
+   restorePreview(previewTabs[Math.min(index,previewTabs.length-1)]);
  }
  let theme=localStorage.getItem('studio-theme')||'system',zoom='fit',width=720,stageHeight=600,tab='HTML',serial=0;
  let media=window.matchMedia("(prefers-color-scheme: dark)"),systemDark=media.matches;
@@ -254,16 +278,12 @@
  }
  $: document.documentElement.dataset.theme=theme;
  $: localStorage.setItem('studio-theme',theme);
- $: dirty=JSON.stringify(design)!==saved;
+ $: dirty=!!id && JSON.stringify(bundlePayload(bundleName,previewTabs,activePreviewId,design))!==saved;
  $: cardWidth=design.width||640;
  $: cardHeight=design.height||400;
  $: scale=zoom==='fit'?Math.min(1.6,Math.max(.05,Math.min((width-72)/cardWidth,(stageHeight-96)/cardHeight))):Number(zoom);
- async function refresh(){designs=await api('designs')}
- async function open(key){
-   randomSerial++;randomizing=false;
-   const next=themedDesign(key?await api('designs/'+key):{...starter});
-   id=key; design=next; saved=JSON.stringify(next); notice='';rememberPreview();
- }
+ async function refresh(){bundles=await api('bundles')}
+ async function open(key){installBundle(key?await api('bundles/'+key):null)}
  let actionDialog,actionResolve=null,actionKind='',actionTitle='',actionMessage='',actionLabel='',actionValue='';
  function askAction(kind,title,message,label,value=''){
    if(actionResolve)return Promise.resolve(null);
@@ -283,58 +303,79 @@
    resolve?.(value);
  }
  async function canLeave(){
-   return !dirty||await askAction('discard','Unsaved changes','Your design has unsaved changes. Discard them and continue?','Discard changes')===true;
+   return !dirty||await askAction('discard','Unsaved changes','This bundle has unsaved changes. Discard them and continue?','Discard changes')===true;
  }
- async function act(fn){if(busy||templateOpening)return;busy=true;try{await fn()}catch(e){notice=e.message}finally{busy=false}}
+ async function act(fn){if(busy)return;busy=true;try{await fn()}catch(e){notice=e.message}finally{busy=false}}
  onMount(()=>{
    const onTheme=e=>systemDark=e.matches;media.addEventListener("change",onTheme);
-   act(async()=>{assets=await api("artwork");await refresh();await open(designs[0]?.id);ready=true});
+   act(async()=>{assets=await api("artwork");await refresh();await open(bundles[0]?.id);ready=true});
    return ()=>{media.removeEventListener("change",onTheme);serial++};
  });
- async function save(){
-   const original=JSON.stringify(design);
-   const resolved=themedDesign(design);
-   const snapshot={...resolved,background_recipe:await backgroundRecipe(resolved)};
-   const result=await api(id?'designs/'+id:'designs',id?'PUT':'POST',snapshot);
-   id=result.id;Object.assign(snapshot,{template_parameters:result.template_parameters??null,bundle_id:result.bundle_id??snapshot.bundle_id??null});if(JSON.stringify(design)===original)design=snapshot;saved=JSON.stringify(snapshot);await refresh();notice='Saved';
+ async function prepareSnapshot(snapshot){
+   const layouts=[];
+   for(const layout of snapshot.layouts){
+     const resolved=themedDesign(layout);
+     layouts.push({...resolved,background_recipe:await backgroundRecipe(resolved)});
+   }
+   return {...snapshot,layouts};
  }
- let templateDialog,templateBundles=[],templates=[],templatesLoading=false,templatesError='',templateSerial=0,templateOpening=null;
- let gallerySettings={};
- function currentSettings(){return {common:design.common||{},seed:design.seed,color:design.color,background:design.background,background_recipe:design.background_recipe,sample:design.sample,auto_theme:design.auto_theme,text_color:design.text_color}}
+ async function save(){
+   if(!id||!bundleName.trim())return;
+   const snapshot=snapshotBundle();
+   await api('bundles/'+id,'PUT',await prepareSnapshot(snapshot));
+   saved=JSON.stringify(snapshot);
+   await refresh();
+   notice='Bundle saved';
+ }
+ let templateDialog,templateBundles=[],templates=[],templatesLoading=false,templatesError='',templateSerial=0;
  async function showTemplates(){
-   templateDialog.showModal();
+   if(!templateDialog.open)templateDialog.showModal();
    const current=++templateSerial;
-   gallerySettings=currentSettings();templates=[];templatesLoading=true;templatesError='';
+   templates=[];templatesLoading=true;templatesError='';
    try{
-     const bundles=await api('template-bundles');
-     const items=bundles.flatMap(bundle=>bundle.templates);
+     const available=await api('bundles');
+     const loaded=await Promise.all(available.map(bundle=>api('bundles/'+bundle.id)));
      if(current!==templateSerial)return;
-     templateBundles=bundles;
-     templates=items.map(item=>({...item,state:'loading',html:'',source:null,error:''}));
+     templateBundles=loaded;
+     const items=loaded.flatMap(bundle=>bundle.layouts.slice(0,3).map((layout,index)=>({
+       id:bundle.id+'-'+index,bundle_id:bundle.id,layout,width:layout.width,height:layout.height,state:'loading'
+     })));
+     templates=items;
      templatesLoading=false;
-     // Render sequentially so procedural backgrounds do not compete for GPU memory.
-     for(let index=0;index<items.length;index++){
+     for(const item of items){
+       await new Promise(resolve=>setTimeout(resolve,0));
        if(current!==templateSerial)return;
        try{
-         const source=await api('templates/'+encodeURIComponent(items[index].id));
-         const result=await renderCard({...starter,...source,...gallerySettings});
+         const result=await renderCard(item.layout,{scale:Math.min(200/item.width,150/item.height),thumbnail:true});
          if(current!==templateSerial)return;
-         templates=templates.map((item,i)=>i===index?{...item,source,html:result.html,render:result,state:'ready'}:item);
-       }catch(e){if(current===templateSerial)templates=templates.map((item,i)=>i===index?{...item,state:'error',error:e.message}:item)}
+         templates=templates.map(entry=>entry.id===item.id?{...entry,html:result.html,state:'ready'}:entry);
+       }catch{
+         if(current===templateSerial)templates=templates.map(entry=>entry.id===item.id?{...entry,state:'error'}:entry);
+       }
      }
    }catch(e){if(current===templateSerial)templatesError=e.message}
    finally{if(current===templateSerial)templatesLoading=false}
  }
  function closeTemplates(){templateSerial++;templateDialog.close()}
- async function newDesign(){
+ async function newBundle(){
    if(!await canLeave())return;
-   const name=await askAction('name','New design','Choose a name for your new card.','Create design','Untitled card');
-   if(name){await open(null);design={...starter,name}}
+   const name=await askAction('name','New bundle','Choose a name for your bundle.','Create bundle','Untitled bundle');
+   if(!name)return;
+   const bundle=await api('bundles','POST',{name,layouts:[{...starter,name:'Layout 1'}]});
+   installBundle(bundle);
+   await refresh();
  }
- async function clone(){if(dirty||!id) await save();const copy=await api('designs/'+id+'/clone','POST');await refresh();await open(copy.id)}
+ async function clone(){
+   if(!id||!bundleName.trim())return;
+   const copy=await api('bundles/'+id+'/clone','POST',await prepareSnapshot(snapshotBundle()));
+   installBundle(copy);
+   await refresh();
+ }
  async function remove(){
-   if(await askAction('delete','Delete design','Delete “'+design.name+'”? This also discards any unsaved edits.','Delete design')){
-     await api('designs/'+id,'DELETE');await refresh();await open(designs[0]?.id);
+   if(await askAction('delete','Delete bundle','Delete “'+bundleName+'” and all its layouts?','Delete bundle')){
+     await api('bundles/'+id,'DELETE');
+     await refresh();
+     await open(bundles[0]?.id);
    }
  }
  function schedule(d,displayScale=scale){
@@ -347,7 +388,7 @@
      }catch(e){if(current===serial){error=e.message;rememberPreview()}}
    },140)
  }
- $: if(ready)schedule({...design},scale);
+ $: if(ready&&id)schedule({...design},scale);
  function key(e){
    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){
      e.preventDefault();if(!actionDialog?.open)act(save);
@@ -373,21 +414,23 @@
    handle.onpointerup=()=>{handle.onpointermove=null};
  }
 </script>
-<svelte:window on:resize={positionSettings} on:keydown={key} on:beforeunload={e=>{if(ready&&hasUnsavedPreviews()){e.preventDefault();e.returnValue=''}}}/>
+<svelte:window on:resize={positionSettings} on:keydown={key} on:beforeunload={e=>{if(ready&&dirty){e.preventDefault();e.returnValue=''}}}/>
 <header class="top"><strong><i>▧</i> Card Designer</strong><span class="tag">STUDIO</span>
-<select aria-label="Open design" value={id??''} disabled={busy||!!templateOpening} on:change={e=>{let k=Number(e.target.value);e.target.value=id??'';act(async()=>{if(await canLeave())await open(k)})}}>
-{#if !id}<option value="">Current draft</option>{/if}{#each designs as d}<option value={d.id}>{d.name}</option>{/each}</select>
-<button class="icon-button" title="New design" aria-label="New design" disabled={busy} on:click={()=>act(newDesign)}><Icon name="new"/></button>
-<button class="icon-button open-templates" title="Open templates" aria-label="Open templates" disabled={busy} on:click={showTemplates}><Icon name="open"/></button>
-<button class="icon-button" title="Clone design" aria-label="Clone design" disabled={busy} on:click={()=>act(clone)}><Icon name="clone"/></button>
-<button class="primary icon-button" title="Save design (Ctrl+S)" aria-label="Save design" disabled={busy} on:click={()=>act(save)}><Icon name="save"/></button>
-<button class="icon-button" title="Delete design" aria-label="Delete design" disabled={busy||!id} on:click={()=>act(remove)}><Icon name="delete"/></button>
+<button class="icon-button" title="New bundle" aria-label="New bundle" disabled={busy} on:click={()=>act(newBundle)}><Icon name="new"/></button>
+<button class="icon-button open-templates" title="Open bundles" aria-label="Open bundles" disabled={busy} on:click={showTemplates}><Icon name="open"/></button>
+<button class="icon-button" title="Clone bundle" aria-label="Clone bundle" disabled={busy||!id||!bundleName.trim()} on:click={()=>act(clone)}><Icon name="clone"/></button>
+<button class="primary icon-button" title="Save bundle (Ctrl+S)" aria-label="Save bundle" disabled={busy||!id||!bundleName.trim()} on:click={()=>act(save)}><Icon name="save"/></button>
+<button class="icon-button" title="Delete bundle" aria-label="Delete bundle" disabled={busy||!id} on:click={()=>act(remove)}><Icon name="delete"/></button>
 <span class="grow"></span><label>Theme <select bind:value={theme}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label></header>
-<div class="toolbar"><label>Design <input bind:value={design.name} maxlength="160"></label>
+{#if id}
+<div class="toolbar"><label>Bundle <input bind:value={bundleName} maxlength="160" disabled={busy||!id}></label>
+<label>Layout <input bind:value={design.name} maxlength="160" disabled={busy||!id}></label>
+<button disabled={busy||!id} on:click={addLayout}>Add layout</button>
+<button disabled={busy||!id||previewTabs.length<2} on:click={()=>act(removeLayout)}>Remove layout</button>
 <button class="icon-button" bind:this={settingsTrigger} title="Background settings" aria-label="Background settings" aria-haspopup="dialog" aria-controls="background-settings" aria-expanded={settingsOpen} on:click={toggleSettings}><Icon name="background"/></button>
-<button class="icon-button" title="Randomize card" aria-label="Randomize card" disabled={randomizing||busy||!!templateOpening} on:click={randomizeCard}><Icon name="shuffle"/></button>
+<button class="icon-button" title="Randomize card" aria-label="Randomize card" disabled={randomizing||busy} on:click={randomizeCard}><Icon name="shuffle"/></button>
 </div>
-<div id="background-settings" class="background-settings" popover="auto" role="dialog" aria-labelledby="background-settings-title" bind:this={settingsPanel} on:toggle={e=>settingsOpen=e.newState==='open'} style={'top:'+settingsTop+'px;left:'+settingsLeft+'px;max-height:calc(100dvh - '+(settingsTop+12)+'px)'}>
+<div id="background-settings" class="background-settings" popover="auto" role="dialog" aria-labelledby="background-settings-title" bind:this={settingsPanel} inert={busy} on:toggle={e=>settingsOpen=e.newState==='open'} style={'top:'+settingsTop+'px;left:'+settingsLeft+'px;max-height:calc(100dvh - '+(settingsTop+12)+'px)'}>
 <div class="settings-heading"><h2 id="background-settings-title">Background settings</h2><button class="icon-button" title="Close background settings" aria-label="Close background settings" on:click={()=>settingsPanel.hidePopover()}><Icon name="close"/></button></div>
 <div class="settings-controls">
 <label for="background-family">Background</label><select id="background-family" bind:value={design.background}><option value="type-b">Type B · Original recipe</option><option value="type-b-v1">Type B · Gradients, grids, lines</option><option value="type-c-v1">Type C · With header</option><option value="type-d-v1">Type D · With country</option><option value="type-a-v1">Type A · Country and header</option><option value="plain">Solid</option>{#each assets as a}<option value={a.id}>{a.name}</option>{/each}</select>
@@ -403,7 +446,7 @@
 {#if recipeError}<p role="alert">{recipeError}</p>{/if}
 <div class="settings-recipe-actions"><button on:click={applyRecipe}>Apply</button><button on:click={()=>{design={...design,background_recipe:null};recipeOpen=false}}>Reset parameters</button><button on:click={()=>recipeOpen=false}>Cancel</button></div></div>{/if}
 </div></div>
-<main style={'--left:'+left+'%;--right:'+right+'%'}>
+<main inert={busy} style={'--left:'+left+'%;--right:'+right+'%'}>
 <section class="sources"><div class="bar">01 / SOURCE <small>EDITABLE</small></div>
 <div class="source-editors" style={'--template-height:'+templateHeight+'%'} bind:this={sourceEditors}>
 <div class="source-pane"><h3>◇ Template <span class="editor-actions"><em>HTML / Jinja</em><button title="Format template (Ctrl+Alt+L)" aria-label="Format template" on:click={()=>templateEditor?.format()}>Format</button></span></h3><Editor bind:this={templateEditor} {dark} value={design.template} label="Template source" change={v=>design.template=v}/></div>
@@ -411,8 +454,8 @@
 <div class="source-pane"><h3># Stylesheet <span class="editor-actions"><em>CSS / Jinja</em><button title="Format stylesheet (Ctrl+Alt+L)" aria-label="Format stylesheet" on:click={()=>cssEditor?.format()}>Format</button></span></h3><Editor bind:this={cssEditor} {dark} value={design.css} language="css" label="CSS source" change={v=>design.css=v}/></div>
 </div></section>
 <button class="grip" aria-label="Resize source panel" on:pointerdown={e=>resize(e,'left')} on:keydown={e=>{if(e.key==='ArrowRight')left=Math.min(38,left+1);if(e.key==='ArrowLeft')left=Math.max(15,left-1)}}></button>
-<section class="canvas"><div class="bar">02 / PREVIEW <span class="editor-actions"><button class="icon-button" aria-label="Download card PNG" title="Download card PNG" disabled={busy||!!templateOpening||!preview} on:click={()=>downloadCards()}><Icon name="download"/></button>{#if previewTabs.length>1}<button class="icon-button" aria-label="Download bundle ZIP" title="Download bundle ZIP" disabled={busy||!!templateOpening} on:click={()=>downloadCards(true)}><Icon name="archive"/></button>{/if}<button class="icon-button" aria-label="Copy card image" title="Copy card image" disabled={copying||!preview} on:click={copyImage}><Icon name="clone"/></button><select aria-label="Zoom" bind:value={zoom}><option value="fit">Fit</option><option value=".5">50%</option><option value="1">100%</option><option value="1.5">150%</option></select></span></div>
-{#if previewTabs.length>1}<nav class="preview-tabs" role="tablist" aria-label="Card layouts">{#each previewTabs as tab,index (tab.key)}<button id={tab.key} role="tab" aria-selected={activePreviewId===tab.key} aria-controls="card-preview-panel" tabindex={activePreviewId===tab.key?0:-1} disabled={busy||!!templateOpening} class:active={activePreviewId===tab.key} on:click={()=>switchPreview(tab.key)} on:keydown={e=>previewTabKey(e,index)}>{activePreviewId===tab.key?design.name:tab.design.name}</button>{/each}</nav>{/if}
+<section class="canvas"><div class="bar">02 / PREVIEW <span class="editor-actions"><button class="icon-button" aria-label="Download card PNG" title="Download card PNG" disabled={busy||!preview} on:click={()=>downloadCards()}><Icon name="download"/></button>{#if id}<button class="icon-button" aria-label="Download bundle ZIP" title="Download bundle ZIP" disabled={busy} on:click={()=>downloadCards(true)}><Icon name="archive"/></button>{/if}<button class="icon-button" aria-label="Copy card image" title="Copy card image" disabled={copying||!preview} on:click={copyImage}><Icon name="clone"/></button><select aria-label="Zoom" bind:value={zoom}><option value="fit">Fit</option><option value=".5">50%</option><option value="1">100%</option><option value="1.5">150%</option></select></span></div>
+{#if previewTabs.length>1}<nav class="preview-tabs" role="tablist" aria-label="Card layouts">{#each previewTabs as tab,index (tab.key)}<button id={tab.key} role="tab" aria-selected={activePreviewId===tab.key} aria-controls="card-preview-panel" tabindex={activePreviewId===tab.key?0:-1} disabled={busy} class:active={activePreviewId===tab.key} on:click={()=>switchPreview(tab.key)} on:keydown={e=>previewTabKey(e,index)}>{activePreviewId===tab.key?design.name:tab.design.name}</button>{/each}</nav>{/if}
 <div class="preview-tab-panel" id="card-preview-panel" role={previewTabs.length>1?'tabpanel':undefined} aria-labelledby={previewTabs.length>1?activePreviewId:undefined}>
 <div class="stage" bind:clientWidth={width} bind:clientHeight={stageHeight}><div class="art"><div class="ruler" aria-hidden="true" style={"background-size:"+scale*32+"px 100%"}></div><small>SPECIMEN　 /　{cardWidth} × {cardHeight}</small><div style={'width:'+cardWidth*scale+'px;height:'+cardHeight*scale+'px'}><iframe title="Card preview" sandbox="" srcdoc={preview} style={'width:'+cardWidth+'px;height:'+cardHeight+'px;transform:scale('+scale+')'}></iframe></div></div></div>
 {#if error}<div role="alert">{error}</div>{/if}</div></section>
@@ -486,7 +529,8 @@
     language={tab==='Context'?'json':tab.toLowerCase()}
     value={tab==='HTML'?output:tab==='CSS'?renderedCSS:JSON.stringify(context,null,2)} />
 {/key}{/if}</section></main>
-<footer>{notice|| (dirty?'● Modified':id?'● Saved locally':'New draft')} <span>Design {id??"draft"}　 /　 Seed {design.seed}</span></footer>
+{:else}<p class="gallery-status">Create a bundle or open one from the gallery.</p>{/if}
+<footer>{notice|| (dirty?'● Modified':id?'● Saved locally':'No bundle open')} <span>Bundle {id??"—"}　 /　 Seed {design.seed}</span></footer>
 
 <dialog class="source-dialog" bind:this={sourceDialog} aria-labelledby="source-dialog-title" aria-describedby="source-dialog-help" on:cancel={e=>{if(sourceBusy)e.preventDefault()}}>
 <form on:submit|preventDefault={addSource}>
@@ -499,26 +543,26 @@
 </form>
 </dialog>
 
-<dialog class="template-dialog" bind:this={templateDialog} aria-labelledby="template-dialog-title" aria-describedby="template-dialog-help" on:cancel={e=>{if(templateOpening){e.preventDefault();return}templateSerial++}}>
-<div class="template-dialog-header"><div><h2 id="template-dialog-title">Open a bundle</h2><p id="template-dialog-help">Choose a bundle to open its layouts in preview tabs.</p></div><button class="icon-button" title="Close templates" aria-label="Close templates" disabled={busy||!!templateOpening} on:click={closeTemplates}><Icon name="close"/></button></div>
-{#if templatesLoading}<p class="gallery-status" role="status"><span class="source-spinner" aria-hidden="true"></span> Loading templates…</p>
+<dialog class="template-dialog" bind:this={templateDialog} aria-labelledby="template-dialog-title" aria-describedby="template-dialog-help" on:cancel={e=>{if(busy){e.preventDefault();return}templateSerial++}}>
+<div class="template-dialog-header"><div><h2 id="template-dialog-title">Open a bundle</h2><p id="template-dialog-help">Choose a bundle to open its layouts in preview tabs.</p></div><button class="icon-button" title="Close bundles" aria-label="Close bundles" disabled={busy} on:click={closeTemplates}><Icon name="close"/></button></div>
+{#if templatesLoading}<p class="gallery-status" role="status"><span class="source-spinner" aria-hidden="true"></span> Loading bundles…</p>
 {:else if templatesError}<div class="gallery-status" role="alert"><p>{templatesError}</p><button on:click={showTemplates}>Try again</button></div>
-{:else if !templates.length}<p class="gallery-status">No templates available.</p>
+{:else if !templates.length}<p class="gallery-status">No bundles available.</p>
 {:else}<div class="bundle-gallery">{#each templateBundles as bundle (bundle.id)}
-<button class="bundle-choice" disabled={busy||!!templateOpening} on:click={()=>openBundle(bundle)} aria-label={'Open bundle '+bundle.name} aria-describedby={'bundle-count-'+bundle.id}>
+<button class="bundle-choice" disabled={busy} on:click={()=>openBundle(bundle)} aria-label={'Open bundle '+bundle.name} aria-describedby={'bundle-count-'+bundle.id}>
 <span class="bundle-stack" aria-hidden="true">
 {#each templates.filter(item=>item.bundle_id===bundle.id).slice(0,3) as item,index (item.id)}
-<span class="stack-card" style={'width:'+item.width*Math.min(200/item.width,150/item.height)+'px;height:'+item.height*Math.min(200/item.width,150/item.height)+'px;left:calc(50% - '+(item.width*Math.min(200/item.width,150/item.height)/2+(Math.min(3,bundle.templates.length)-1)*9)+'px + '+index*18+'px);top:'+((200-item.height*Math.min(200/item.width,150/item.height)-(Math.min(3,bundle.templates.length)-1)*10)/2+index*10)+'px;z-index:'+(index+1)+';transform:rotate('+((index-1)*4)+'deg)'}>
-{#if item.state==='ready'}<iframe title={'Bundle preview '+item.id} sandbox="" tabindex="-1" srcdoc={item.html} style={'width:'+item.width+'px;height:'+item.height+'px;transform:scale('+Math.min(200/item.width,150/item.height)+')'}></iframe>{:else}<span class="source-spinner"></span>{/if}
+<span class="stack-card" style={'width:'+item.width*Math.min(200/item.width,150/item.height)+'px;height:'+item.height*Math.min(200/item.width,150/item.height)+'px;left:calc(50% - '+(item.width*Math.min(200/item.width,150/item.height)/2+(Math.min(3,bundle.layouts.length)-1)*9)+'px + '+index*18+'px);top:'+((200-item.height*Math.min(200/item.width,150/item.height)-(Math.min(3,bundle.layouts.length)-1)*10)/2+index*10)+'px;z-index:'+(index+1)+';transform:rotate('+((index-1)*4)+'deg)'}>
+{#if item.state==='ready'}<iframe title={'Bundle preview '+item.id} sandbox="" tabindex="-1" srcdoc={item.html} style={'width:'+item.width+'px;height:'+item.height+'px;transform:scale('+Math.min(200/item.width,150/item.height)+')'}></iframe>{:else if item.state==='loading'}<span class="source-spinner"></span>{:else}<span>Preview unavailable</span>{/if}
 </span>{/each}
 </span>
-<span class="bundle-copy"><strong>{bundle.name}</strong><span class="bundle-count" id={'bundle-count-'+bundle.id}>{bundle.templates.length} {bundle.templates.length===1?'template':'templates'}</span></span>
+<span class="bundle-copy"><strong>{bundle.name}</strong><span class="bundle-count" id={'bundle-count-'+bundle.id}>{bundle.layouts.length} {bundle.layouts.length===1?'layout':'layouts'}</span></span>
 </button>{/each}</div>{/if}
 </dialog>
 
 <dialog class="action-dialog" bind:this={actionDialog} aria-labelledby="action-title" aria-describedby="action-message" on:cancel={e=>{e.preventDefault();finishAction()}}>
 <form on:submit|preventDefault={()=>finishAction(actionKind==='name'?actionValue.trim():true)}>
 <h2 id="action-title">{actionTitle}</h2><p id="action-message">{actionMessage}</p>
-{#if actionKind==='name'}<label for="new-design-name">Design name</label><input id="new-design-name" bind:value={actionValue} required maxlength="160">{/if}
+{#if actionKind==='name'}<label for="new-bundle-name">Bundle name</label><input id="new-bundle-name" bind:value={actionValue} required maxlength="160">{/if}
 <div class="dialog-actions"><button type="button" on:click={()=>finishAction()}>{actionKind==='discard'?'Keep editing':'Cancel'}</button><button class:danger={actionKind!=='name'} class:primary={actionKind==='name'} disabled={actionKind==='name'&&!actionValue.trim()}>{actionLabel}</button></div>
 </form></dialog>
