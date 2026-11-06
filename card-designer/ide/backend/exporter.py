@@ -1,16 +1,19 @@
 """Saved layout pairings and resumable local export sessions."""
 import json
 import logging
-from contextlib import closing
+import re
+from contextlib import closing, contextmanager
 from pathlib import Path
 from random import Random
 from tempfile import TemporaryDirectory
 from threading import Lock, Thread
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from .record_files import JsonRecords, legacy_sequence
 from .export_files import class_names, expected_files, preview_instance, render_instance, renderer
 
 logger = logging.getLogger(__name__)
@@ -38,24 +41,33 @@ class SessionRequest(BaseModel):
     folder: str = Field(max_length=80, pattern=SAFE_NAME)
 
 
+class SnapshotLayout(LayoutReference):
+    source_bundle: str
+    design: dict
+
+
+class SavedSession(SessionRequest):
+    bundle_name: str
+    samples: list[str]
+    layouts: list[SnapshotLayout] = Field(min_length=1, max_length=16)
+    classes: list[str]
+    status: Literal["draft", "running", "pausing", "paused", "failed", "complete"]
+    completed: int = Field(ge=0)
+    error: str
+
+
 def validate_filename(value):
     if value.casefold() in WINDOWS_DEVICES:
         raise HTTPException(422, f"{value!r} is a reserved filename")
 
 
-def load_row(db, table, key):
-    row = db.execute(f"SELECT * FROM {table} WHERE id=?", (key,)).fetchone()
-    if row is None:
-        raise HTTPException(404, "Export bundle or session was deleted")
-    return row
-
-
 class Exporter:
-    def __init__(self, database, load_bundle, catalog, root):
+    def __init__(self, database, load_bundle, catalog, root, records_root):
         self.database = database
         self.load_bundle = load_bundle
         self.catalog = catalog
         self.root = root.resolve()
+        self.records_root = records_root
         self.lock = Lock()
         self.workers = {}
         self.router = APIRouter(prefix="/api/export")
@@ -71,17 +83,45 @@ class Exporter:
         ):
             self.router.add_api_route(path, handler, methods=[method])
 
-    def initialize(self):
+    @property
+    def bundle_records(self):
+        return JsonRecords(self.records_root() / "export-bundles")
+
+    @property
+    def session_records(self):
+        return JsonRecords(self.records_root() / "export-sessions")
+
+    @contextmanager
+    def writes(self):
         with closing(self.database()) as db, db:
-            db.execute("CREATE TABLE IF NOT EXISTS export_bundle(id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL)")
-            db.execute("""
-                CREATE TABLE IF NOT EXISTS export_session(
-                    id INTEGER PRIMARY KEY AUTOINCREMENT, folder TEXT NOT NULL UNIQUE COLLATE NOCASE,
-                    payload TEXT NOT NULL, status TEXT NOT NULL, completed INTEGER NOT NULL DEFAULT 0,
-                    error TEXT NOT NULL DEFAULT ''
-                )
-            """)
-            db.execute("UPDATE export_session SET status='paused' WHERE status IN ('running', 'pausing')")
+            db.execute("BEGIN IMMEDIATE")
+            yield db
+
+    def initialize(self):
+        with self.writes() as db:
+            if db.execute("PRAGMA user_version").fetchone()[0] < 6:
+                for table, records in (("export_bundle", self.bundle_records),
+                                       ("export_session", self.session_records)):
+                    if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+                        continue
+                    for row in db.execute(f"SELECT * FROM {table} ORDER BY id"):
+                        record = json.loads(row["payload"])
+                        if table == "export_session":
+                            record.update(folder=row["folder"], status=row["status"],
+                                          completed=row["completed"], error=row["error"])
+                        records.migrate(row["id"], record)
+                    records.keep_next_id(legacy_sequence(db, table) + 1)
+                db.execute("PRAGMA user_version=6")
+
+        with self.writes():
+            for key in self.session_records.keys():
+                try:
+                    session = self.load_session(key)
+                except HTTPException as exc:
+                    logger.warning("Skipping export session %s during recovery: %s", key, exc.detail)
+                    continue
+                if session["status"] in ("running", "pausing"):
+                    self.session_records.write(key, {**session, "status": "paused"})
 
     def resolve_layouts(self, bundle):
         layouts = []
@@ -102,32 +142,34 @@ class Exporter:
         return layouts
 
     def bundles(self):
-        with closing(self.database()) as db:
-            return [dict(id=row["id"], **json.loads(row["payload"]))
-                    for row in db.execute("SELECT * FROM export_bundle ORDER BY id")]
+        records = self.bundle_records
+        return [{**records.load(key), "id": key} for key in records.keys()]
 
     def create_bundle(self, bundle: ExportBundle):
-        with closing(self.database()) as db, db:
+        with self.writes():
             self.resolve_layouts(bundle)
-            key = db.execute("INSERT INTO export_bundle(payload) VALUES (?)", (bundle.model_dump_json(),)).lastrowid
+            records = self.bundle_records
+            key = records.reserve()
+            records.write(key, bundle.model_dump())
         return dict(id=key, **bundle.model_dump())
 
     def update_bundle(self, key: int, bundle: ExportBundle):
-        with closing(self.database()) as db, db:
+        with self.writes():
             self.resolve_layouts(bundle)
-            if not db.execute("UPDATE export_bundle SET payload=? WHERE id=?", (bundle.model_dump_json(), key)).rowcount:
-                raise HTTPException(404, "Export bundle was deleted")
+            self.bundle_records.load(key)
+            self.bundle_records.write(key, bundle.model_dump())
         return dict(id=key, **bundle.model_dump())
 
     def delete_bundle(self, key: int):
-        with closing(self.database()) as db, db:
-            if not db.execute("DELETE FROM export_bundle WHERE id=?", (key,)).rowcount:
-                raise HTTPException(404, "Export bundle was deleted")
+        with self.writes():
+            try:
+                self.bundle_records.path(key).unlink()
+            except FileNotFoundError as exc:
+                raise HTTPException(404, "Export bundle was deleted") from exc
         return {"deleted": key}
 
     def clone_bundle(self, key: int):
-        with closing(self.database()) as db:
-            bundle = ExportBundle.model_validate_json(load_row(db, "export_bundle", key)["payload"])
+        bundle = ExportBundle.model_validate(self.bundle_records.load(key))
         bundle.name = bundle.name[:155] + " copy"
         return self.create_bundle(bundle)
 
@@ -141,16 +183,52 @@ class Exporter:
                        for source in catalog["sources"] if source.get("count"))
         return sources
 
-    def session_summary(self, row):
-        payload = json.loads(row["payload"])
-        summary = {k: v for k, v in payload.items() if k not in {"samples", "layouts"}}
-        return {**summary, "id": row["id"], "status": row["status"], "completed": row["completed"],
-                "error": row["error"], "layout_count": len(payload["layouts"]),
-                "output_path": str(self.root / row["folder"])}
+    def load_session(self, key):
+        records = self.session_records
+        try:
+            session = SavedSession.model_validate(records.load(key))
+            validate_filename(session.folder)
+            stems = set()
+            for layout in session.layouts:
+                validate_filename(layout.stem)
+                stems.add(layout.stem.casefold())
+            if len(stems) != len(session.layouts) or session.completed > session.count:
+                raise ValueError("Invalid layout names or progress")
+            return session.model_dump()
+        except ValueError as exc:
+            raise HTTPException(422, f"Invalid export session: {records.path(key)}") from exc
+
+    def session_summary(self, key, session):
+        summary = {k: v for k, v in session.items() if k not in {"samples", "layouts"}}
+        folder = self.output_folder(session)
+        if session["status"] in ("paused", "failed", "complete"):
+            completed = self.local_progress(folder, session["completed"])
+            if completed < session["completed"]:
+                summary.update(status="paused", completed=completed)
+        return {**summary, "id": key, "layout_count": len(session["layouts"]), "output_path": str(folder)}
 
     def sessions(self):
-        with closing(self.database()) as db:
-            return [self.session_summary(row) for row in db.execute("SELECT * FROM export_session ORDER BY id DESC")]
+        records = self.session_records
+        return [self.session_summary(key, self.load_session(key)) for key in reversed(records.keys())]
+
+    def output_folder(self, session):
+        name = session["folder"]
+        if not isinstance(name, str) or not re.fullmatch(SAFE_NAME, name):
+            raise HTTPException(422, "Invalid session output folder")
+        validate_filename(name)
+        return self.root / name
+
+    @staticmethod
+    def local_progress(folder, recorded):
+        if not recorded or folder.is_symlink() or not folder.is_dir():
+            return 0
+        instances = {path.name for path in folder.iterdir()
+                     if path.name.isascii() and path.name.isdecimal()
+                     and not path.is_symlink() and path.is_dir()}
+        for index in range(1, recorded + 1):
+            if f"{index:06d}" not in instances:
+                return index - 1
+        return recorded
 
     def create_session(self, settings: SessionRequest):
         validate_filename(settings.folder)
@@ -162,31 +240,38 @@ class Exporter:
                 raise HTTPException(422, "This record source has no available records")
             Random(settings.seed).shuffle(samples)
         folder = self.root / settings.folder
-        with closing(self.database()) as db, db:
-            db.execute("BEGIN IMMEDIATE")
-            row = load_row(db, "export_bundle", settings.bundle_id)
-            bundle = ExportBundle.model_validate_json(row["payload"])
+        with self.writes():
+            records = self.session_records
+            bundle = ExportBundle.model_validate(self.bundle_records.load(settings.bundle_id))
             layouts = self.resolve_layouts(bundle)
             session = {**settings.model_dump(), "bundle_name": bundle.name, "samples": samples,
-                       "layouts": layouts, "classes": class_names(layouts)}
-            if db.execute("SELECT 1 FROM export_session WHERE folder=?", (settings.folder,)).fetchone():
+                       "layouts": layouts, "classes": class_names(layouts),
+                       "status": "draft", "completed": 0, "error": ""}
+            if any(self.load_session(key)["folder"].casefold() == settings.folder.casefold() for key in records.keys()):
                 raise HTTPException(409, "Choose a different output folder")
-            self.root.mkdir(parents=True, exist_ok=True)
+            self.create_output_folder(folder, session["classes"])
             try:
-                folder.mkdir()
-            except FileExistsError as exc:
-                raise HTTPException(409, "Output folder already exists") from exc
-            try:
-                (folder / "classes.txt").write_text("\n".join(session["classes"]) + "\n", encoding="utf-8")
-                key = db.execute("INSERT INTO export_session(folder,payload,status) VALUES (?,?,'draft')",
-                                 (settings.folder, json.dumps(session))).lastrowid
-                result = self.session_summary(load_row(db, "export_session", key))
-                db.commit()
+                key = records.reserve()
+                records.write(key, session)
+                result = self.session_summary(key, session)
             except Exception:
                 (folder / "classes.txt").unlink(missing_ok=True)
                 folder.rmdir()
                 raise
         return result
+
+    def create_output_folder(self, folder, classes):
+        self.root.mkdir(parents=True, exist_ok=True)
+        try:
+            folder.mkdir()
+        except FileExistsError as exc:
+            raise HTTPException(409, "Output folder already exists") from exc
+        try:
+            (folder / "classes.txt").write_text("\n".join(classes) + "\n", encoding="utf-8")
+        except Exception:
+            (folder / "classes.txt").unlink(missing_ok=True)
+            folder.rmdir()
+            raise
 
     @staticmethod
     def origin(request):
@@ -194,9 +279,7 @@ class Exporter:
         return f"http://127.0.0.1:{request.scope['server'][1]}"
 
     def preview(self, key: int, request: Request):
-        with closing(self.database()) as db:
-            row = load_row(db, "export_session", key)
-            session = json.loads(row["payload"])
+        session = self.load_session(key)
         try:
             return preview_instance(self.origin(request), session)
         except Exception as exc:
@@ -206,80 +289,89 @@ class Exporter:
     def start(self, key: int, request: Request):
         origin = self.origin(request)
         with self.lock:
-            with closing(self.database()) as db, db:
-                row = load_row(db, "export_session", key)
-                if key in self.workers or row["status"] not in ("draft", "paused", "failed"):
+            with self.writes():
+                records = self.session_records
+                session = self.load_session(key)
+                folder = self.output_folder(session)
+                missing_output = not folder.exists() and not folder.is_symlink()
+                completed = self.local_progress(folder, session["completed"])
+                resumable = session["status"] in ("draft", "paused", "failed")
+                incomplete = session["status"] == "complete" and completed < session["completed"]
+                if key in self.workers or not (resumable or incomplete):
                     raise HTTPException(409, "This session cannot be started right now")
-                db.execute("UPDATE export_session SET status='running',error='' WHERE id=?", (key,))
-                result = self.session_summary(load_row(db, "export_session", key))
+                if missing_output:
+                    self.create_output_folder(folder, session["classes"])
+                session.update(status="running", error="", completed=completed)
+                records.write(key, session)
+                result = self.session_summary(key, session)
             worker = Thread(target=self.run, args=(key, origin), name=f"card-export-{key}", daemon=True)
             self.workers[key] = worker
             try:
                 worker.start()
             except Exception:
                 del self.workers[key]
-                self.set_status(key, "failed", "Could not start the export worker")
+                self.update_session(key, status="failed", error="Could not start the export worker")
                 raise
         return result
 
     def pause(self, key: int):
-        with closing(self.database()) as db, db:
-            if not db.execute("UPDATE export_session SET status='pausing' WHERE id=? AND status='running'", (key,)).rowcount:
+        with self.writes():
+            records = self.session_records
+            session = self.load_session(key)
+            if session["status"] != "running":
                 raise HTTPException(409, "This session is not running")
-            return self.session_summary(load_row(db, "export_session", key))
+            session["status"] = "pausing"
+            records.write(key, session)
+            return self.session_summary(key, session)
 
-    def set_status(self, key, status, error=""):
-        with closing(self.database()) as db, db:
-            db.execute("UPDATE export_session SET status=?,error=? WHERE id=?", (status, error, key))
+    def update_session(self, key, **changes):
+        with self.writes():
+            records = self.session_records
+            records.write(key, {**self.load_session(key), **changes})
 
     def run(self, key, origin):
         status, error = "complete", ""
         try:
-            with closing(self.database()) as db:
-                row = load_row(db, "export_session", key)
-                session = json.loads(row["payload"])
-                folder = self.root / row["folder"]
-                if folder.is_symlink() or not folder.is_dir():
-                    raise ValueError("The original output folder is unavailable")
-                class_file = folder / "classes.txt"
-                if class_file.is_symlink() or class_file.read_text(encoding="utf-8").splitlines() != session["classes"]:
-                    raise ValueError("The session class map has changed")
-                with renderer(origin) as capture:
-                    for index in range(row["completed"], session["count"]):
-                        if load_row(db, "export_session", key)["status"] == "pausing":
-                            status = "paused"
-                            break
-                        target = folder / f"{index+1:06d}"
-                        if target.exists():
-                            # A restart can land between the atomic publish and the progress update.
-                            if (target.is_symlink() or not target.is_dir()
-                                    or {path.name for path in target.iterdir()} != expected_files(session["layouts"])
-                                    or any(path.is_symlink() or not path.is_file() or not path.stat().st_size
-                                           for path in target.iterdir())):
-                                raise ValueError(f"Incomplete existing instance {target.name}. Move it aside and resume.")
-                        else:
-                            with TemporaryDirectory(prefix=".stage-", dir=folder) as temporary:
-                                stage = Path(temporary) / "instance"
-                                stage.mkdir()
-                                render_instance(capture, session, index, stage)
-                                stage.rename(target)
-                        with db:
-                            db.execute("UPDATE export_session SET completed=? WHERE id=?", (index + 1, key))
+            session = self.load_session(key)
+            folder = self.output_folder(session)
+            if folder.is_symlink() or not folder.is_dir():
+                raise ValueError("The original output folder is unavailable")
+            class_file = folder / "classes.txt"
+            if class_file.is_symlink() or class_file.read_text(encoding="utf-8").splitlines() != session["classes"]:
+                raise ValueError("The session class map has changed")
+            with renderer(origin) as capture:
+                for index in range(session["completed"], session["count"]):
+                    if self.load_session(key)["status"] == "pausing":
+                        status = "paused"
+                        break
+                    target = folder / f"{index+1:06d}"
+                    if target.exists():
+                        # A restart can land between the atomic publish and the progress update.
+                        if (target.is_symlink() or not target.is_dir()
+                                or {path.name for path in target.iterdir()} != expected_files(session["layouts"])
+                                or any(path.is_symlink() or not path.is_file() or not path.stat().st_size
+                                       for path in target.iterdir())):
+                            raise ValueError(f"Incomplete existing instance {target.name}. Move it aside and resume.")
+                    else:
+                        with TemporaryDirectory(prefix=".stage-", dir=folder) as temporary:
+                            stage = Path(temporary) / "instance"
+                            stage.mkdir()
+                            render_instance(capture, session, index, stage)
+                            stage.rename(target)
+                    self.update_session(key, completed=index + 1)
         except Exception as exc:
             logger.exception("Card export session %s failed", key)
             status, error = "failed", str(exc)
         finally:
             with self.lock:
                 self.workers.pop(key, None)
-                self.set_status(key, status, error)
+                self.update_session(key, status=status, error=error)
 
     def instance_path(self, key, index):
-        with closing(self.database()) as db:
-            row = load_row(db, "export_session", key)
-            if not 1 <= index <= row["completed"]:
-                raise HTTPException(404, "Instance is not available")
-            payload = json.loads(row["payload"])
-            folder = self.root / row["folder"] / f"{index:06d}"
+        payload = self.load_session(key)
+        if not 1 <= index <= payload["completed"]:
+            raise HTTPException(404, "Instance is not available")
+        folder = self.output_folder(payload) / f"{index:06d}"
         if folder.resolve() != folder or not folder.is_dir():
             raise HTTPException(404, "Instance folder is not available")
         return folder, expected_files(payload["layouts"])

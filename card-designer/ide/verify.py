@@ -20,7 +20,7 @@ class ReplayTest(unittest.TestCase):
         self.assertEqual(original, render(42))
 
     def test_bundle_crud_and_clone_are_atomic_and_independent(self):
-        with tempfile.TemporaryDirectory() as temp, patch.object(service, "DB", Path(temp) / "test.db"):
+        with tempfile.TemporaryDirectory() as temp, patch.object(service, "DB", Path(temp) / "test.db"), patch.object(service, "records_root", lambda: Path(temp) / "records"):
             bundle = service.Bundle(name="Test bundle", layouts=[self.design, self.design])
             original = service.create_bundle(bundle)["id"]
             draft = bundle.model_copy(deep=True)
@@ -34,7 +34,7 @@ class ReplayTest(unittest.TestCase):
             self.assertEqual(service.list_bundles(), [{"id": original, "name": "Test bundle", "layout_count": 2}])
 
     def test_existing_design_migrates_once_and_deleted_bundle_stays_deleted(self):
-        with tempfile.TemporaryDirectory() as temp, patch.object(service, "DB", Path(temp) / "test.db"):
+        with tempfile.TemporaryDirectory() as temp, patch.object(service, "DB", Path(temp) / "test.db"), patch.object(service, "records_root", lambda: Path(temp) / "records"):
             with service.database() as db:
                 db.execute("CREATE TABLE design(id INTEGER PRIMARY KEY, payload TEXT NOT NULL)")
                 db.execute("INSERT INTO design(payload) VALUES (?)", (self.design.model_dump_json(),))

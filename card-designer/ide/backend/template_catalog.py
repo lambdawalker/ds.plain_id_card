@@ -5,11 +5,11 @@ import yaml
 from .template_context import ASSET_SOURCES
 from .template_variations import variation_schema
 
-ROOT = Path(__file__).resolve().parents[1] / 'templates' / 'id_cards'
+ROOT = Path(__file__).resolve().parents[1] / 'records' / 'layouts' / 'id_cards'
 
 
 def bundle_registry():
-    return yaml.safe_load((ROOT.parent / 'bundles.yaml').read_text(encoding='utf-8'))['bundles']
+    return yaml.safe_load((ROOT.parents[1] / 'design-bundles' / 'catalog.yaml').read_text(encoding='utf-8'))['bundles']
 
 
 def template_source(key):
