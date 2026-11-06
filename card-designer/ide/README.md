@@ -41,7 +41,13 @@ Save a design and read its numeric ID from the status bar. With the server runni
     uv run --no-project --python 3.12 --with playwright python -m playwright install chromium
     uv run --no-project --python 3.12 --with playwright python bulk.py --design 1 --seed 42 --count 10 --samples 1 2 --output batch-01
 
-The first card uses seed 42, subsequent cards increment the seed, and selected records cycle in order. Omitting --samples and --seed uses the saved selections. Each completed directory contains card.png and record.json with seed, sample ID and data-class bounding boxes in card pixels. Choose a fresh output directory for a repeat run. This exporter has a separate format from the original JPEG dataset pipeline.
+The first card uses seed 42, subsequent cards increment the seed, and selected records cycle in order. Omitting `--samples` and `--seed` uses the saved selections. `--bundle` cycles through the selected bundle's layouts. Run the same command with `--resume` to continue an interrupted run. Resume verifies each existing PNG and record and renders missing samples. Move a damaged sample directory aside before resuming. A changed design, planned input, renderer fingerprint, or browser version requires a fresh output directory.
+
+- `manifest.json` captures the design and variants, seed and sample schedule, resolved preview hashes (including embedded font bytes), referenced photo and artwork hashes, and browser and renderer fingerprints. Keep the original source assets and browser environment available for replay. System font files are environment dependencies.
+- Each completed directory contains `card.png` and `record.json` with element boxes and OCR word annotations in native card pixels. Each word records its text, box fragments, and field label when present. Custom templates can use `data-field` to name fields explicitly.
+- `validation.json` lists render failures, missing assets, text outside the card, duplicate PNGs, and coverage by template, font, background, and split. `training.jsonl` indexes completed samples without reported issues. Train/validation assignment uses the portrait hash when available and the resolved record ID otherwise. Paths are relative to the output directory.
+
+The pilot exports clean card images. Its word labels and training index are independent of the original JPEG dataset pipeline.
 
 ## Backend boundary
 The Svelte client calls the Python service through /api. SQLite stores designs and the backend owns disk access. /docs lists the API. The same service serves the production web build for local use. The bulk command reads a saved design through HTTP and runs the same browser renderer used by the IDE.
