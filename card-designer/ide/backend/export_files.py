@@ -15,6 +15,7 @@ from .card_capture import annotation_script, capture_card
 BUILTIN_CLASSES = ("card", "photo", "barcode", "pdf417", "qrcode", "mrz-text")
 
 
+DEFAULT_OUTPUTS = dict(images=True, yolo=True, ocr=True, card_capture=True)
 CAPTURE_JSON = "expected-card-capture.json"
 CAPTURE_FIELDS = (
     "full_name", "given_names", "surnames", "birth_date", "document_number",
@@ -121,10 +122,18 @@ def image_filename(stem, image_format):
     return stem + (".jpg" if image_format == "jpeg" else ".png")
 
 
-def expected_files(layouts, image_format="png"):
-    return {"expected-ocr.yaml", CAPTURE_JSON,
-            *(image_filename(layout["stem"], image_format) for layout in layouts),
-            *(layout["stem"] + ".txt" for layout in layouts)}
+def expected_files(layouts, image_format="png", outputs=None):
+    outputs = DEFAULT_OUTPUTS if outputs is None else outputs
+    files = set()
+    if outputs["ocr"]:
+        files.add("expected-ocr.yaml")
+    if outputs["card_capture"]:
+        files.add(CAPTURE_JSON)
+    if outputs["images"]:
+        files.update(image_filename(layout["stem"], image_format) for layout in layouts)
+    if outputs["yolo"]:
+        files.update(layout["stem"] + ".txt" for layout in layouts)
+    return files
 
 
 def render_instance(capture, session, index, target):
@@ -134,6 +143,7 @@ def render_instance(capture, session, index, target):
     sample = samples[index % len(samples)] if samples else ""
     result = {"instance": index + 1, "seed": seed, "sample": sample or None, "layouts": {}}
     image_format = session.get("image_format", "png")
+    outputs = session.get("outputs", DEFAULT_OUTPUTS)
     layout_words = []
     identities = []
     for layout in session["layouts"]:
@@ -152,25 +162,28 @@ def render_instance(capture, session, index, target):
             if word["field"] and word["role"] == "value":
                 fields[word["field"]].append(word["text"])
         result["layouts"][stem] = {
-            "image": image,
+            "image": image if outputs["images"] else None,
             "fields": {field: " ".join(values) for field, values in fields.items()},
             "text": " ".join(word["text"] for word in words),
             "words": words,
             "missing_assets": rendered.get("context", {}).get("missing", []),
         }
-        (target / (stem + ".txt")).write_text(
-            yolo_labels(measured["elements"], design["width"], design["height"], session["classes"]),
-            encoding="utf-8",
+        if outputs["yolo"]:
+            (target / (stem + ".txt")).write_text(
+                yolo_labels(measured["elements"], design["width"], design["height"], session["classes"]),
+                encoding="utf-8",
+            )
+        if outputs["images"]:
+            options = {"quality": 95} if image_format == "jpeg" else {}
+            card.screenshot(path=str(target / image), type=image_format, animations="disabled", **options)
+    if outputs["ocr"]:
+        (target / "expected-ocr.yaml").write_text(
+            yaml.safe_dump(result, allow_unicode=True, sort_keys=False), encoding="utf-8"
         )
-        options = {"quality": 95} if image_format == "jpeg" else {}
-        card.screenshot(path=str(target / image), type=image_format, animations="disabled", **options)
-    (target / "expected-ocr.yaml").write_text(
-        yaml.safe_dump(result, allow_unicode=True, sort_keys=False), encoding="utf-8"
-    )
-
-    (target / CAPTURE_JSON).write_text(
-        json.dumps(capture_expectation(layout_words, identities), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    if outputs["card_capture"]:
+        (target / CAPTURE_JSON).write_text(
+            json.dumps(capture_expectation(layout_words, identities), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
 
 
 def instance_view(folder, session, image_source):
@@ -181,14 +194,19 @@ def instance_view(folder, session, image_source):
         return path.read_text(encoding="utf-8")
 
     image_format = session.get("image_format", "png")
+    outputs = session.get("outputs", DEFAULT_OUTPUTS)
     images = []
-    for layout in session["layouts"]:
-        stem = layout["stem"]
-        name = image_filename(stem, image_format)
-        images.append({"name": name, "src": image_source(name), "yolo": read(stem + ".txt")})
-    return {"images": images, "ocr": read("expected-ocr.yaml"),
-            "card_capture": read(CAPTURE_JSON) if (folder / CAPTURE_JSON).is_file() else None,
-            "classes": session["classes"]}
+    if outputs["images"] or outputs["yolo"]:
+        for layout in session["layouts"]:
+            stem = layout["stem"]
+            image = image_filename(stem, image_format)
+            labels = stem + ".txt"
+            images.append({"name": image if outputs["images"] else labels,
+                           "src": image_source(image) if outputs["images"] else None,
+                           "yolo": read(labels) if outputs["yolo"] else None})
+    return {"images": images, "ocr": read("expected-ocr.yaml") if outputs["ocr"] else None,
+            "card_capture": read(CAPTURE_JSON) if outputs["card_capture"] and (folder / CAPTURE_JSON).is_file() else None,
+            "classes": session["classes"] if outputs["yolo"] else None}
 
 
 def preview_instance(origin, session):
