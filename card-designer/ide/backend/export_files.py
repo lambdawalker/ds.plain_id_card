@@ -117,8 +117,14 @@ def renderer(origin):
             browser.close()
 
 
-def expected_files(layouts):
-    return {"expected-ocr.yaml", CAPTURE_JSON, *(layout["stem"] + suffix for layout in layouts for suffix in (".png", ".txt"))}
+def image_filename(stem, image_format):
+    return stem + (".jpg" if image_format == "jpeg" else ".png")
+
+
+def expected_files(layouts, image_format="png"):
+    return {"expected-ocr.yaml", CAPTURE_JSON,
+            *(image_filename(layout["stem"], image_format) for layout in layouts),
+            *(layout["stem"] + ".txt" for layout in layouts)}
 
 
 def render_instance(capture, session, index, target):
@@ -127,11 +133,13 @@ def render_instance(capture, session, index, target):
     samples = session["samples"]
     sample = samples[index % len(samples)] if samples else ""
     result = {"instance": index + 1, "seed": seed, "sample": sample or None, "layouts": {}}
+    image_format = session.get("image_format", "png")
     layout_words = []
     identities = []
     for layout in session["layouts"]:
         design = {**layout["design"], "seed": seed, "sample": sample}
         stem = layout["stem"]
+        image = image_filename(stem, image_format)
         rendered, card = capture_card(engine, page, design)
         measured = card.evaluate(annotations)
         if measured["broken_images"]:
@@ -144,7 +152,7 @@ def render_instance(capture, session, index, target):
             if word["field"] and word["role"] == "value":
                 fields[word["field"]].append(word["text"])
         result["layouts"][stem] = {
-            "image": stem + ".png",
+            "image": image,
             "fields": {field: " ".join(values) for field, values in fields.items()},
             "text": " ".join(word["text"] for word in words),
             "words": words,
@@ -154,7 +162,8 @@ def render_instance(capture, session, index, target):
             yolo_labels(measured["elements"], design["width"], design["height"], session["classes"]),
             encoding="utf-8",
         )
-        card.screenshot(path=str(target / (stem + ".png")), animations="disabled")
+        options = {"quality": 95} if image_format == "jpeg" else {}
+        card.screenshot(path=str(target / image), type=image_format, animations="disabled", **options)
     (target / "expected-ocr.yaml").write_text(
         yaml.safe_dump(result, allow_unicode=True, sort_keys=False), encoding="utf-8"
     )
@@ -164,18 +173,32 @@ def render_instance(capture, session, index, target):
     )
 
 
+def instance_view(folder, session, image_source):
+    def read(name):
+        path = folder / name
+        if path.is_symlink() or not path.is_file():
+            raise FileNotFoundError(name)
+        return path.read_text(encoding="utf-8")
+
+    image_format = session.get("image_format", "png")
+    images = []
+    for layout in session["layouts"]:
+        stem = layout["stem"]
+        name = image_filename(stem, image_format)
+        images.append({"name": name, "src": image_source(name), "yolo": read(stem + ".txt")})
+    return {"images": images, "ocr": read("expected-ocr.yaml"),
+            "card_capture": read(CAPTURE_JSON) if (folder / CAPTURE_JSON).is_file() else None,
+            "classes": session["classes"]}
+
+
 def preview_instance(origin, session):
     with TemporaryDirectory() as directory, renderer(origin) as capture:
         folder = Path(directory)
         render_instance(capture, session, 0, folder)
-        return {
-            "images": [
-                {"name": layout["stem"] + ".png",
-                 "src": "data:image/png;base64," + b64encode((folder / (layout["stem"] + ".png")).read_bytes()).decode(),
-                 "yolo": (folder / (layout["stem"] + ".txt")).read_text(encoding="utf-8")}
-                for layout in session["layouts"]
-            ],
-            "ocr": (folder / "expected-ocr.yaml").read_text(encoding="utf-8"),
-            "card_capture": (folder / CAPTURE_JSON).read_text(encoding="utf-8"),
-            "classes": session["classes"],
-        }
+        image_format = session.get("image_format", "png")
+
+        def data_url(name):
+            encoded = b64encode((folder / name).read_bytes()).decode()
+            return f"data:image/{image_format};base64,{encoded}"
+
+        return instance_view(folder, session, data_url)

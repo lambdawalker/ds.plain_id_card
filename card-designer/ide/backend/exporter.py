@@ -10,13 +10,14 @@ from random import Random
 from tempfile import TemporaryDirectory
 from threading import BoundedSemaphore, Event, Lock, Thread
 from typing import Literal
+from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from .record_files import JsonRecords, legacy_sequence
-from .export_files import CAPTURE_JSON, class_names, expected_files, preview_instance, render_instance, renderer
+from .export_files import CAPTURE_JSON, class_names, expected_files, instance_view, preview_instance, render_instance, renderer
 
 logger = logging.getLogger(__name__)
 SAFE_NAME = r"^[A-Za-z0-9][A-Za-z0-9_-]*$"
@@ -41,6 +42,7 @@ class SessionRequest(BaseModel):
     count: int = Field(ge=1, le=100000)
     seed: int = Field(ge=0, lt=2**32)
     folder: str = Field(max_length=80, pattern=SAFE_NAME)
+    image_format: Literal["png", "jpeg"] = "png"
 
 
 class SnapshotLayout(LayoutReference):
@@ -82,6 +84,8 @@ class Exporter:
             ("/bundles/{key}", "PUT", self.update_bundle), ("/bundles/{key}", "DELETE", self.delete_bundle),
             ("/bundles/{key}/clone", "POST", self.clone_bundle), ("/sources", "GET", self.sources),
             ("/sessions", "GET", self.sessions), ("/sessions", "POST", self.create_session),
+            ("/sessions/{key}", "DELETE", self.delete_session),
+            ("/sessions/{key}/rerun", "POST", self.rerun),
             ("/sessions/{key}/preview", "POST", self.preview),
             ("/sessions/{key}/start", "POST", self.start), ("/sessions/{key}/pause", "POST", self.pause),
             ("/sessions/{key}/instances/{index}", "GET", self.instance),
@@ -297,22 +301,48 @@ class Exporter:
             self.browser_slots.release()
 
     def start(self, key: int, request: Request):
-        origin = self.origin(request)
+        return self.launch(key, self.origin(request), rerun=False)
+
+    def rerun(self, key: int, request: Request):
+        return self.launch(key, self.origin(request), rerun=True)
+
+    def delete_session(self, key: int):
+        with self.lock, self.writes():
+            session = self.load_session(key)
+            if key in self.workers or session["status"] in ("running", "pausing"):
+                raise HTTPException(409, "Pause the export session before deleting it")
+            self.session_records.path(key).unlink()
+        return {"deleted": key}
+
+    def launch(self, key, origin, *, rerun):
         with self.lock:
             with self.writes():
                 records = self.session_records
                 session = self.load_session(key)
+                if key in self.workers or session["status"] in ("running", "pausing"):
+                    raise HTTPException(409, "The export session is already running")
+                if rerun:
+                    if session["status"] == "draft":
+                        raise HTTPException(409, "Start this export session first")
+                    suffix = "-rerun-" + uuid4().hex[:12]
+                    session["folder"] = session["folder"].split("-rerun-")[0][:80-len(suffix)] + suffix
+                    completed = 0
                 folder = self.output_folder(session)
-                missing_output = not folder.exists() and not folder.is_symlink()
-                completed = self.local_progress(folder, session["completed"])
-                resumable = session["status"] in ("draft", "paused", "failed")
-                incomplete = session["status"] == "complete" and completed < session["completed"]
-                if key in self.workers or not (resumable or incomplete):
-                    raise HTTPException(409, "This session cannot be started right now")
-                if missing_output:
+                if not rerun:
+                    completed = self.local_progress(folder, session["completed"])
+                    if session["status"] == "complete" and completed == session["completed"]:
+                        raise HTTPException(409, "This export session is already complete")
+                created = rerun or (not folder.exists() and not folder.is_symlink())
+                if created:
                     self.create_output_folder(folder, session["classes"])
                 session.update(status="running", error="", completed=completed)
-                records.write(key, session)
+                try:
+                    records.write(key, session)
+                except Exception:
+                    if created:
+                        (folder / "classes.txt").unlink(missing_ok=True)
+                        folder.rmdir()
+                    raise
                 result = self.session_summary(key, session)
             stop = Event()
             worker = Thread(target=self.run, args=(key, origin, stop), name=f"card-export-{key}", daemon=True)
@@ -346,7 +376,7 @@ class Exporter:
         indices = iter(range(completed, session["count"]))
         finished = set()
         progress_lock = Lock()
-        expected = expected_files(session["layouts"])
+        expected = expected_files(session["layouts"], session.get("image_format", "png"))
 
         def stop_on_error(exc_type, _exc, _traceback):
             if exc_type is not None:
@@ -433,17 +463,22 @@ class Exporter:
         folder = self.output_folder(payload) / f"{index:06d}"
         if folder.resolve() != folder or not folder.is_dir():
             raise HTTPException(404, "Instance folder is not available")
-        filenames = expected_files(payload["layouts"])
+        filenames = expected_files(payload["layouts"], payload["image_format"])
         if not (folder / CAPTURE_JSON).is_file():
             filenames.remove(CAPTURE_JSON)
-        return folder, filenames
+        return folder, filenames, payload
 
     def instance(self, key: int, index: int):
-        folder, filenames = self.instance_path(key, index)
-        return {"path": str(folder), "files": sorted(filenames)}
+        folder, filenames, payload = self.instance_path(key, index)
+        prefix = f"/api/export/sessions/{key}/instances/{index}/"
+        try:
+            view = instance_view(folder, payload, lambda name: prefix + name)
+        except (OSError, UnicodeError) as exc:
+            raise HTTPException(404, "Instance annotations are unavailable") from exc
+        return {"path": str(folder), "files": sorted(filenames), **view}
 
     def file(self, key: int, index: int, filename: str):
-        folder, filenames = self.instance_path(key, index)
+        folder, filenames, _ = self.instance_path(key, index)
         path = folder / filename
         if filename not in filenames or path.is_symlink() or not path.is_file():
             raise HTTPException(404, "Export file is not available")
