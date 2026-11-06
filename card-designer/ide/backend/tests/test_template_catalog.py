@@ -47,7 +47,7 @@ class TemplateCatalogTest(unittest.TestCase):
         from pathlib import Path
         import tempfile
         from unittest.mock import patch
-        with tempfile.TemporaryDirectory() as tmp, patch.object(service, 'DB', Path(tmp) / 'design.db'):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(service, 'DB', Path(tmp) / 'design.db'), patch.object(service, "records_root", lambda: Path(tmp) / "records"):
             design = service.Design(**service.open_template('C'), seed=42, color='#a4d5c8', background='plain')
             key = service.create_bundle(service.Bundle(name="Test bundle", layouts=[design]))['id']
             saved = service.Design.model_validate(service.read_bundle(key)["layouts"][0])

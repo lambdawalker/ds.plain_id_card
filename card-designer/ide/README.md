@@ -33,11 +33,22 @@ The dataset browser starts empty until real sources are connected. To browse rea
 
 The API indexes JPEG, PNG and WebP files recursively at startup. The filename stem is the display name and the relative path determines a stable record ID. Select a record in **Data sources**; its ID and photo URL appear in Context. Restart the server after adding files. Open the gear-shaped **Background settings** panel and use **Artwork** to import a separate background. SQLite and imported artwork live under data/; set CARD_DATA to relocate them.
 
-### Editing design bundle files
+### Studio records
 
-Studio saves each design bundle in `CARD_DATA/bundles/<id>/bundle.yaml` (`ide/data/bundles` by default). Open the YAML file to edit the bundle name, layout order, or layout settings. The `template` and `css` fields contain the source as multiline text. Reopen the bundle in Studio to load your edits. Save or close any open Studio draft before editing the file, since saving an older draft replaces the file.
+The Git-tracked `card-designer/ide/records/` directory contains four folders:
 
-Keep the numeric folder name and each layout's `layout_id` when editing an existing bundle. Card Exporter uses those IDs to find the layouts. Give any manually added layout a unique, non-empty `layout_id` within the bundle. Studio imports legacy SQLite design bundles once and keeps their database records as a backup. Back up the whole `bundles` directory, including `.next-id`, to preserve the bundle IDs across restores.
+| Folder | Contents |
+| --- | --- |
+| `layouts/` | Built-in HTML, CSS and layout metadata |
+| `design-bundles/` | Built-in bundle catalog and saved `<id>/bundle.yaml` records |
+| `export-bundles/` | Saved layout pairings, one `<id>.json` per record |
+| `export-sessions/` | Session settings, frozen layouts, and progress, one `<id>.json` per session |
+
+Studio writes these files locally. Commit the records you want to carry between checkouts, including the `.next-id` counters. Keep numeric filenames, bundle folder names, and existing `layout_id` values stable so references still resolve. Saved design YAML keeps its HTML and CSS in multiline fields. Reopen a bundle in Studio after editing its file.
+
+On upgrade, Studio imports the old `CARD_DATA/bundles` YAML files or legacy SQLite design records, plus SQLite export bundles and sessions. Original records stay available for recovery. If an incoming ID already has a different record in the destination, Studio reports the conflict rather than overwriting it. `CARD_RECORDS` optionally redirects the writable records to another folder. Use a separate records folder for each concurrently running Studio instance. Set both `CARD_DATA` and `CARD_RECORDS` to temporary folders when running tests so they use isolated records.
+
+Generated files, artwork, and dataset connections stay local. A shared session resumes from the first missing local instance. If the output folder is absent, Studio recreates it. Dataset-backed sessions still require the corresponding source assets.
 
 ## Card Exporter
 
@@ -117,7 +128,7 @@ The server starts serving the IDE immediately and warms saved dataset references
 The UI polls `/api/datasets/status` while startup indexing runs, keeps referenced tabs visible with loading indicators, and refreshes records and saved previews when ready. A selected record that is still loading returns HTTP 503; static templates remain usable. Background failures are logged and shown in the dataset panel. Restart the server to pick up files added to connected folders. Shutdown cancels queued work and does not wait indefinitely for a blocked filesystem scan.
 
 ## Template families and context
-The editor versions of `templates/id_cards/A` through `G` live under `ide/templates/id_cards/`. All seven families now use explicit layout files and dataset-backed fields. Shared HTML and bounded styling are composed with `base.css`; no gallery template uses synthetic text/date/address generators or random structural positioning. Original upstream files and older saved source remain untouched for compatibility.
+The editor versions of `templates/id_cards/A` through `G` live under `ide/records/layouts/id_cards/`. All seven families now use explicit layout files and dataset-backed fields. Shared HTML and bounded styling are composed with `base.css`; no gallery template uses synthetic text/date/address generators or random structural positioning. Original upstream files and older saved source remain untouched for compatibility.
 
 `backend/template_catalog.py` provides flat and grouped catalogs through `/api/templates` and `/api/template-bundles`. The intermediary projects the fields referenced by each template:
 
@@ -180,7 +191,7 @@ CARD_SERVER=http://127.0.0.1:8765 npm --prefix ../packages/drawing-tools run tes
 A Horizontal keeps a stable field order (name, birth/sex, address, document, personal/nationality, issue/expiry) with separate fixed-side portrait-left and portrait-right layouts. Its faint grayscale secondary portrait is an opposite-side watermark beneath all field text. The browser layout audit checks its position, opacity, stacking and reading order across seeds.
 
 ## Template bundles and bounded variations
-`templates/bundles.yaml` groups related templates. The **Horizontal identity card** bundle starts with `A-left` and `A-right`: their portrait, text and watermark regions never switch sides when the seed changes. The gallery groups templates by bundle and previews each layout. `A` remains an API alias for `A-left`; older saved template source is preserved.
+`records/design-bundles/catalog.yaml` groups related templates. The **Horizontal identity card** bundle starts with `A-left` and `A-right`: their portrait, text and watermark regions never switch sides when the seed changes. The gallery groups templates by bundle and previews each layout. `A` remains an API alias for `A-left`; older saved template source is preserved.
 
 A’s variation profile v1 permits only bounded changes: margins 24–32 px, body font 25–28 px, labels 15–17 px, field gaps 10–14 px, column gaps 28–36 px, header gaps 20–26 px, watermark opacity .08–.14, and the approved issue/expiry row ordering. The independent seeded stream does not change background or data generator random streams. Keep v1 stable; incompatible future changes require a new version.
 

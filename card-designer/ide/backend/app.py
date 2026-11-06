@@ -8,7 +8,6 @@ import sqlite3
 import secrets
 from uuid import uuid4
 from contextlib import closing, asynccontextmanager, contextmanager, suppress
-from tempfile import NamedTemporaryFile
 from concurrent.futures import Future, TimeoutError as FutureTimeout
 from queue import Queue, Empty
 from pathlib import Path
@@ -25,6 +24,7 @@ from jinja2 import StrictUndefined, TemplateError
 from jinja2.sandbox import SandboxedEnvironment
 from .path_resolver import resolve
 from .exporter import Exporter
+from .record_files import atomic_write, counter_value, legacy_sequence
 from threading import RLock, Thread, Event
 from .photo_dataset import metadata, photo_index
 from .legacy import sample_template
@@ -142,7 +142,8 @@ def stock_bundle(bundle):
                 **bundle.get("defaults", {})}
     layouts = [Design(**template_source(item["id"]), **defaults) for item in bundle["templates"]]
     saved = Bundle(name=bundle["name"], layouts=layouts)
-    assign_layout_ids(saved)
+    for layout in saved.layouts:
+        layout.layout_id = f"stock-{layout.template_id}"
     return saved
 
 
@@ -172,11 +173,11 @@ def upgrade_stock_layouts(db):
     db.execute("PRAGMA user_version = 1")
 
 
-def assign_layout_ids(bundle):
+def assign_layout_ids(bundle, legacy_key=None):
     seen = set()
-    for layout in bundle.layouts:
+    for index, layout in enumerate(bundle.layouts):
         if not layout.layout_id or layout.layout_id in seen:
-            layout.layout_id = uuid4().hex
+            layout.layout_id = uuid4().hex if legacy_key is None else f"legacy-{legacy_key}-{index}"
         seen.add(layout.layout_id)
 
 
@@ -186,7 +187,7 @@ def upgrade_legacy_bundles(db):
     if db.execute("PRAGMA user_version").fetchone()[0] < 2:
         for key, payload in db.execute("SELECT id,payload FROM bundle").fetchall():
             bundle = Bundle.model_validate_json(payload)
-            assign_layout_ids(bundle)
+            assign_layout_ids(bundle, legacy_key=key)
             db.execute("UPDATE bundle SET payload=? WHERE id=?", (bundle.model_dump_json(), key))
         db.execute("PRAGMA user_version=2")
     if db.execute("PRAGMA user_version").fetchone()[0] < 3:
@@ -210,8 +211,12 @@ BundleDumper.add_representer(
 )
 
 
+def records_root():
+    return Path(os.getenv("CARD_RECORDS", ROOT / "records"))
+
+
 def bundle_root():
-    root = DB.parent / "bundles"
+    root = records_root() / "design-bundles"
     if root.is_symlink():
         raise RuntimeError(f"Bundle storage must be a directory: {root}")
     return root
@@ -225,25 +230,14 @@ def bundle_file(key):
     return path
 
 
-def atomic_write(path, contents):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with NamedTemporaryFile(dir=path.parent, delete=False, mode="w", encoding="utf-8", newline="\n") as file:
-        temporary = Path(file.name)
-        try:
-            file.write(contents)
-            file.close()
-            temporary.replace(path)
-        finally:
-            temporary.unlink(missing_ok=True)
-
-
 def write_bundle(key, bundle):
     atomic_write(bundle_file(key), yaml.dump(bundle.model_dump(mode="json"), Dumper=BundleDumper,
                                             allow_unicode=True, sort_keys=False, width=120))
 
 
-def bundle_keys():
-    names = (path.parent.name for path in bundle_root().glob("*/bundle.yaml")
+def bundle_keys(root=None):
+    root = bundle_root() if root is None else root
+    names = (path.parent.name for path in root.glob("*/bundle.yaml")
              if not path.parent.is_symlink() and not path.is_symlink() and path.is_file())
     return sorted(int(name) for name in names if name.isascii() and name.isdecimal() and name[0] != "0")
 
@@ -251,33 +245,39 @@ def bundle_keys():
 def initialize_bundle_storage():
     with closing(database()) as db, db:
         db.execute("BEGIN IMMEDIATE")
-        if db.execute("PRAGMA user_version").fetchone()[0] >= 4:
-            return
+        version = db.execute("PRAGMA user_version").fetchone()[0]
         counter = bundle_root() / ".next-id"
+        if version >= 5 and (counter.exists() or bundle_keys()):
+            return
+        previous = DB.parent / "bundles"
         tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        sequence = None
-        if tables.intersection({"bundle", "design"}):
+        sequence = 0
+        if version == 4:
+            records = [(key, read_bundle_file(previous / str(key) / "bundle.yaml"))
+                       for key in bundle_keys(previous)]
+            sequence = counter_value(previous) - 1
+        elif version < 4 and tables.intersection({"bundle", "design"}):
             upgrade_legacy_bundles(db)
             records = [(key, Bundle.model_validate_json(payload))
                        for key, payload in db.execute("SELECT id,payload FROM bundle ORDER BY id")]
-            if "sqlite_sequence" in tables or "bundle" not in tables:
-                sequence = db.execute("SELECT seq FROM sqlite_sequence WHERE name='bundle'").fetchone()
-        elif counter.exists():
+            sequence = legacy_sequence(db, "bundle")
+        elif counter.exists() or bundle_keys():
             records = []
         else:
             records = [(key, stock_bundle(item)) for key, item in enumerate(template_bundles(), 1)]
         for key, bundle in records:
             if not bundle_file(key).exists():
                 write_bundle(key, bundle)
-        next_id = max(next_bundle_id(), sequence[0] + 1 if sequence else 1)
+            elif load_bundle(key) != bundle:
+                raise RuntimeError(f"Design bundle {key} differs between legacy storage and {bundle_file(key)}")
+        next_id = max(next_bundle_id(), sequence + 1)
         atomic_write(counter, f"{next_id}\n")
-        db.execute("PRAGMA user_version=4")
+        if version < 5:
+            db.execute("PRAGMA user_version=5")
 
 
 def next_bundle_id():
-    counter = bundle_root() / ".next-id"
-    return max(int(counter.read_text(encoding="utf-8")) if counter.exists() else 1,
-               max(bundle_keys(), default=0) + 1)
+    return max(counter_value(bundle_root()), max(bundle_keys(), default=0) + 1)
 
 
 def add_bundle(bundle):
@@ -287,8 +287,7 @@ def add_bundle(bundle):
     return key
 
 
-def load_bundle(key):
-    path = bundle_file(key)
+def read_bundle_file(path):
     try:
         bundle = Bundle.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
         ids = {layout.layout_id for layout in bundle.layouts}
@@ -301,6 +300,10 @@ def load_bundle(key):
     except (yaml.YAMLError, ValueError, OSError) as exc:
         logger.warning("Invalid bundle file %s: %s", path, exc)
         raise HTTPException(422, f"Invalid bundle file: {path}") from exc
+
+
+def load_bundle(key):
+    return read_bundle_file(bundle_file(key))
 
 
 initialize_bundle_storage()
@@ -772,7 +775,7 @@ def preview(request: Preview):
     return {**result, "person": person, "context": context_summary}
 
 
-exporter = Exporter(database, load_bundle, lambda: catalog, Path(os.getenv("CARD_EXPORT_ROOT", DATA / "exports")))
+exporter = Exporter(database, load_bundle, lambda: catalog, Path(os.getenv("CARD_EXPORT_ROOT", DATA / "exports")), records_root)
 app.include_router(exporter.router)
 
 app.mount("/backgrounds", StaticFiles(directory=ROOT.parent / "backgrounds"))
