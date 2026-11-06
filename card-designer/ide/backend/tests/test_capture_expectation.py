@@ -14,16 +14,28 @@ class CaptureExpectationTest(unittest.TestCase):
             + words("NAME", "López", capture_field="surnames")
             + words("DOCUMENT NO.", "000042")
             + words("NATIONALITY", "Mexican")
-            + words("PERSONAL NUMBER", "—"),
+            + words("PERSONAL NUMBER", "000123"),
             words("DATE OF BIRTH", "06/11/1990")
             + words("ISSUING COUNTRY", "Mexico")
             + words("EXPIRES", "06/11/2040", clipped=True),
         ])
         self.assertEqual(expected, {
             "full_name": "Ana María López", "given_names": "Ana María", "surnames": "López",
-            "birth_date": "06/11/1990", "document_number": "000042", "personal_number": "",
+            "birth_date": "06/11/1990", "document_number": "000042", "issued_identifier": "000123",
             "address": "", "issue_date": "", "expiry_date": "", "issuing_country": "Mexico",
         })
+
+    def test_identifier_accepts_new_and_legacy_layout_annotations(self):
+        for field, metadata in [
+            ("issued_identifier", {}),
+            ("personal_number", {}),
+            (None, {"capture_field": "issued_identifier"}),
+            (None, {"capture_field": "personal_number"}),
+        ]:
+            with self.subTest(field=field, metadata=metadata):
+                expected = capture_expectation([words(field, "ABC0123", **metadata)])
+                self.assertEqual(expected["issued_identifier"], "ABC0123")
+                self.assertNotIn("personal_number", expected)
 
     def test_repeated_values_do_not_duplicate_and_conflicting_values_are_empty(self):
         self.assertEqual(capture_expectation([

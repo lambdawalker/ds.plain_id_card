@@ -18,7 +18,7 @@ BUILTIN_CLASSES = ("card", "photo", "barcode", "pdf417", "qrcode", "mrz-text")
 CAPTURE_JSON = "expected-card-capture.json"
 CAPTURE_FIELDS = (
     "full_name", "given_names", "surnames", "birth_date", "document_number",
-    "personal_number", "address", "issue_date", "expiry_date", "issuing_country",
+    "issued_identifier", "address", "issue_date", "expiry_date", "issuing_country",
 )
 CAPTURE_LABELS = {
     "name": "full_name", "first name": "given_names", "surname": "surnames",
@@ -38,6 +38,8 @@ def capture_expectation(layout_words):
                 continue
             label = (word.get("field") or "").strip().casefold().rstrip(".")
             key = word.get("capture_field") or CAPTURE_LABELS.get(label, label.replace(" ", "_"))
+            if key == "personal_number":
+                key = "issued_identifier"
             if key not in CAPTURE_FIELDS:
                 continue
             if word.get("clipped"):
