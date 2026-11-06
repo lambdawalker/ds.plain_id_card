@@ -743,7 +743,7 @@ def preview(request: Preview):
         requested = requirements(d.template, d.css)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
-    if d.sample in snapshot["fields"] and (requested is None or requested['compatibility'] or requested['identity'] or requested['card'] or requested['address']):
+    if d.sample in snapshot["fields"] and (requested is None or requested['compatibility'] or requested['identity'] or requested['card'] or requested['address'] or 'identity_source' in requested['names']):
         try:
             person = {**person, **metadata(snapshot["fields"][d.sample], snapshot["types"][d.sample])}
         except (OSError, ValueError) as exc:

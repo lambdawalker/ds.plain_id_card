@@ -1,8 +1,17 @@
 <script>
  import {onMount} from 'svelte';
+ import Editor from './Editor.svelte';
  import {api, renderCard} from './render.js';
 
- export let active = true;
+ export let active = true, dark = false;
+ let previewTab = 0;
+ $: previewTabs = preview ? [
+   ...preview.images.map(image => ({label:image.name, image, language:'yolo', value:image.yolo})),
+   {label:'Expected OCR YAML', language:'yaml', value:preview.ocr},
+   {label:'Expected Card Capture JSON', language:'json', value:preview.card_capture},
+   {label:'YOLO class map', language:'yolo', value:preview.classes.map((name,index)=>index+' '+name).join('\n')},
+ ] : [];
+ $: selectedPreview = previewTabs[previewTab];
  let view = 'bundles';
  let bundles = [], designer = [], sessions = [], sources = [];
  let draft = null, baseline = '', selected = null, busy = false, error = '';
@@ -186,7 +195,17 @@
 
  async function previewSession() {
    output = null;
+   previewTab = 0;
    preview = await api('export/sessions/' + session.id + '/preview', 'POST');
+ }
+
+ function movePreviewTab(event) {
+   const last = previewTabs.length - 1;
+   const indices = {ArrowLeft:(previewTab+last)%(last+1), ArrowRight:(previewTab+1)%(last+1), Home:0, End:last};
+   if (!Object.hasOwn(indices, event.key)) return;
+   event.preventDefault();
+   previewTab = indices[event.key];
+   event.currentTarget.parentElement.children[previewTab].focus();
  }
 
  async function showOutput(index) {
@@ -343,12 +362,24 @@
      {/if}
      {#if preview}
       <h3>Preview instance</h3>
-      {#each preview.images as image}
-       <details open><summary>{image.name}</summary><img class="export-image" src={image.src} alt={image.name}><pre>{image.yolo}</pre></details>
-      {/each}
-      <details><summary>Expected OCR YAML</summary><pre>{preview.ocr}</pre></details>
-      <details><summary>Expected Card Capture JSON</summary><pre>{preview.card_capture}</pre></details>
-      <details><summary>YOLO class map</summary><pre>{preview.classes.map((name,index)=>index+' '+name).join('\n')}</pre></details>
+      <div class="export-preview-tabs" role="tablist" aria-label="Instance preview">
+       {#each previewTabs as tab, index}
+        <button type="button" role="tab" id={'export-preview-tab-'+index} aria-controls="export-preview-content"
+          aria-selected={previewTab===index} tabindex={previewTab===index ? 0 : -1}
+          class:active={previewTab===index} on:click={()=>previewTab=index} on:keydown={movePreviewTab}>{tab.label}</button>
+       {/each}
+      </div>
+      {#if selectedPreview}
+       <div class="export-preview-content" id="export-preview-content" role="tabpanel" aria-labelledby={'export-preview-tab-'+previewTab}>
+        {#if selectedPreview.image}
+         <img class="export-image" src={selectedPreview.image.src} alt={selectedPreview.image.name}>
+        {/if}
+        {#key previewTab}
+         <Editor readOnly {dark} label={selectedPreview.image ? selectedPreview.label+' YOLO labels' : selectedPreview.label}
+          language={selectedPreview.language} value={selectedPreview.value}/>
+        {/key}
+       </div>
+      {/if}
      {/if}
      {#if output}
       <h3>Instance {String(output.index).padStart(6,'0')}</h3>
@@ -415,7 +446,10 @@
  progress {width:100%; accent-color:var(--accent);}
  .export-details {display:grid; grid-template-columns:auto minmax(0,1fr); gap:8px; overflow-wrap:anywhere;}
  dd {margin:0;}
- pre {white-space:pre-wrap; overflow-wrap:anywhere; background:var(--canvas); padding:10px;}
+ .export-preview-tabs {display:flex; gap:6px; overflow-x:auto; padding:8px 0;}
+ .export-preview-tabs button {flex-shrink:0;}
+ .export-preview-tabs button.active {color:var(--accent);}
+ .export-preview-content :global(.editor) {height:220px; background:var(--canvas); border:1px solid var(--line); border-radius:5px;}
  .export-error {color:var(--ink); border:1px solid #b87065; padding:8px; white-space:pre-wrap; overflow-wrap:anywhere;}
  .export-session-form {display:grid; gap:8px;}
  .export-image {display:block; max-width:100%; margin-top:8px; border-radius:5px;}

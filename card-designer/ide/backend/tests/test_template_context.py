@@ -32,10 +32,12 @@ class TemplateProjectionTest(unittest.TestCase):
         selected = {**snapshot['records']['photo-1'],'prompt':'PRIVATE LARGE PROMPT','description':'LONG DESCRIPTION'}
         design = service.Design(**template_source('A'), seed=42, color='#ffffff', background='plain')
         context, summary = project_context(snapshot, design, selected, random.Random(42))
-        self.assertEqual(summary['data'], {'id':'person_001','index':0})
+        self.assertNotIn('data', summary)
         self.assertNotIn('PRIVATE LARGE PROMPT', str(summary))
         self.assertEqual(summary['assets'], {'photo':'/api/photos/photo-1'})
-        self.assertEqual(set(summary['bindings']), {'lambdaWalker/ds.photo_id'})
+        self.assertNotIn('bindings', summary)
+        self.assertNotIn('selection', summary)
+        self.assertNotIn('identity_source', context)
 
     def test_legacy_custom_templates_keep_dataset_facade(self):
         design = service.Design(name='Legacy', template="{{ ds.image('lambdaWalker/ds.photo_id', data.id, 'image') }}",
@@ -81,3 +83,4 @@ class TemplateProjectionTest(unittest.TestCase):
         self.assertEqual(response['context']['projection'], 'template')
         self.assertNotIn('datasets', response['context'])
         self.assertNotIn('card', response['person'])
+        self.assertEqual(set(response['context']), {'assets', 'missing', 'projection', 'template_selection'})
