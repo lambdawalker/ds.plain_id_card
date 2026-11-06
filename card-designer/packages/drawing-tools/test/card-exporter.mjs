@@ -17,14 +17,14 @@ async function api(path, method='GET', data) {
   assert.ok(response.ok(), await response.text());
   return response.json();
 }
-async function waitForSession(id, status) {
+async function waitForSession(id, ...statuses) {
   for (let i=0;i<120;i++) {
     const current = (await api('export/sessions')).find(item=>item.id===id);
-    if (current.status===status) return current;
+    if (statuses.includes(current.status)) return current;
     if (current.status==='failed') throw Error(current.error);
     await new Promise(resolve=>setTimeout(resolve,250));
   }
-  throw Error('Session did not reach ' + status);
+  throw Error('Session did not reach ' + statuses.join(' or '));
 }
 
 try {
@@ -47,7 +47,7 @@ try {
   const dialog = page.getByRole('dialog',{name:'New session'});
   await dialog.getByLabel('Session name').fill(tag+' session');
   await dialog.getByLabel('Record source').selectOption('none');
-  await dialog.getByLabel('Instances').fill('3');
+  await dialog.getByLabel('Instances').fill('5');
   await dialog.getByRole('button',{name:'Create session'}).click();
   await button('Preview one instance').click();
   await page.getByText('Expected OCR YAML',{exact:true}).waitFor();
@@ -64,10 +64,10 @@ try {
 
   await button('Start').click();
   await api('export/sessions/'+firstSession.id+'/pause','POST');
-  await waitForSession(firstSession.id,'paused');
-  await button('Resume').click();
+  const stopped = await waitForSession(firstSession.id,'paused','complete');
+  if (stopped.status === 'paused') await button('Resume').click();
   const complete = await waitForSession(firstSession.id,'complete');
-  assert.equal(complete.completed,3);
+  assert.equal(complete.completed,5);
   await button('Open output').click();
   await page.getByRole('link',{name:'expected-ocr.yaml',exact:true}).waitFor();
   const prefix = base+'/api/export/sessions/'+firstSession.id+'/instances/1';

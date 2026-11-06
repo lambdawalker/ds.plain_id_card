@@ -1,12 +1,14 @@
 """Saved layout pairings and resumable local export sessions."""
 import json
 import logging
+import os
 import re
-from contextlib import closing, contextmanager
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack, closing, contextmanager
 from pathlib import Path
 from random import Random
 from tempfile import TemporaryDirectory
-from threading import Lock, Thread
+from threading import BoundedSemaphore, Event, Lock, Thread
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
@@ -70,6 +72,10 @@ class Exporter:
         self.records_root = records_root
         self.lock = Lock()
         self.workers = {}
+        self.worker_limit = int(os.getenv("CARD_EXPORT_WORKERS", "32"))
+        if not 1 <= self.worker_limit <= 32:
+            raise ValueError("CARD_EXPORT_WORKERS must be between 1 and 32")
+        self.browser_slots = BoundedSemaphore(self.worker_limit)
         self.router = APIRouter(prefix="/api/export")
         for path, method, handler in (
             ("/bundles", "GET", self.bundles), ("/bundles", "POST", self.create_bundle),
@@ -280,11 +286,15 @@ class Exporter:
 
     def preview(self, key: int, request: Request):
         session = self.load_session(key)
+        if not self.browser_slots.acquire(blocking=False):
+            raise HTTPException(409, "All export browsers are busy. Try preview again when a worker is free.")
         try:
             return preview_instance(self.origin(request), session)
         except Exception as exc:
             logger.exception("Export preview failed for session %s", key)
             raise HTTPException(422, str(exc)) from exc
+        finally:
+            self.browser_slots.release()
 
     def start(self, key: int, request: Request):
         origin = self.origin(request)
@@ -304,8 +314,9 @@ class Exporter:
                 session.update(status="running", error="", completed=completed)
                 records.write(key, session)
                 result = self.session_summary(key, session)
-            worker = Thread(target=self.run, args=(key, origin), name=f"card-export-{key}", daemon=True)
-            self.workers[key] = worker
+            stop = Event()
+            worker = Thread(target=self.run, args=(key, origin, stop), name=f"card-export-{key}", daemon=True)
+            self.workers[key] = stop
             try:
                 worker.start()
             except Exception:
@@ -315,13 +326,14 @@ class Exporter:
         return result
 
     def pause(self, key: int):
-        with self.writes():
+        with self.lock, self.writes():
             records = self.session_records
             session = self.load_session(key)
-            if session["status"] != "running":
+            if session["status"] != "running" or key not in self.workers:
                 raise HTTPException(409, "This session is not running")
             session["status"] = "pausing"
             records.write(key, session)
+            self.workers[key].set()
             return self.session_summary(key, session)
 
     def update_session(self, key, **changes):
@@ -329,7 +341,72 @@ class Exporter:
             records = self.session_records
             records.write(key, {**self.load_session(key), **changes})
 
-    def run(self, key, origin):
+    def render_batch(self, key, origin, session, folder, stop):
+        completed = session["completed"]
+        indices = iter(range(completed, session["count"]))
+        finished = set()
+        progress_lock = Lock()
+        expected = expected_files(session["layouts"])
+
+        def stop_on_error(exc_type, _exc, _traceback):
+            if exc_type is not None:
+                stop.set()
+
+        def work():
+            nonlocal completed
+            try:
+                with ExitStack() as resources:
+                    # Reserve capacity before taking an index so another session cannot
+                    # leave a gap behind a worker that is still waiting for a browser.
+                    while not stop.is_set():
+                        if self.browser_slots.acquire(timeout=0.1):
+                            resources.callback(self.browser_slots.release)
+                            break
+                    capture = None
+                    while not stop.is_set():
+                        with progress_lock:
+                            index = next(indices, None) if not stop.is_set() else None
+                        if index is None:
+                            return
+                        target = folder / f"{index+1:06d}"
+                        if target.exists() or target.is_symlink():
+                            # A restart can land between publication and the progress update.
+                            if (target.is_symlink() or not target.is_dir()
+                                    or {path.name for path in target.iterdir()} | {CAPTURE_JSON} != expected
+                                    or any(path.is_symlink() or not path.is_file() or not path.stat().st_size
+                                           for path in target.iterdir())):
+                                raise ValueError(f"Incomplete existing instance {target.name}. Move it aside and resume.")
+                        else:
+                            if capture is None:
+                                # Sync Playwright objects stay on the thread that created them.
+                                capture = resources.enter_context(renderer(origin))
+                                resources.push(stop_on_error)
+                            with TemporaryDirectory(prefix=".stage-", dir=folder) as temporary:
+                                stage = Path(temporary) / "instance"
+                                stage.mkdir()
+                                render_instance(capture, session, index, stage)
+                                stage.rename(target)
+                        with progress_lock:
+                            finished.add(index)
+                            previous = completed
+                            while completed in finished:
+                                finished.remove(completed)
+                                completed += 1
+                            if completed != previous:
+                                self.update_session(key, completed=completed)
+            except Exception:
+                stop.set()
+                raise
+
+        workers = min(self.worker_limit, session["count"] - completed)
+        if workers:
+            with ThreadPoolExecutor(max_workers=workers, thread_name_prefix=f"export-{key}") as pool:
+                tasks = [pool.submit(work) for _ in range(workers)]
+                for task in tasks:
+                    task.result()
+        return completed
+
+    def run(self, key, origin, stop):
         status, error = "complete", ""
         try:
             session = self.load_session(key)
@@ -339,27 +416,8 @@ class Exporter:
             class_file = folder / "classes.txt"
             if class_file.is_symlink() or class_file.read_text(encoding="utf-8").splitlines() != session["classes"]:
                 raise ValueError("The session class map has changed")
-            with renderer(origin) as capture:
-                for index in range(session["completed"], session["count"]):
-                    if self.load_session(key)["status"] == "pausing":
-                        status = "paused"
-                        break
-                    target = folder / f"{index+1:06d}"
-                    if target.exists():
-                        # A restart can land between the atomic publish and the progress update.
-                        expected = expected_files(session["layouts"])
-                        if (target.is_symlink() or not target.is_dir()
-                                or {path.name for path in target.iterdir()} | {CAPTURE_JSON} != expected
-                                or any(path.is_symlink() or not path.is_file() or not path.stat().st_size
-                                       for path in target.iterdir())):
-                            raise ValueError(f"Incomplete existing instance {target.name}. Move it aside and resume.")
-                    else:
-                        with TemporaryDirectory(prefix=".stage-", dir=folder) as temporary:
-                            stage = Path(temporary) / "instance"
-                            stage.mkdir()
-                            render_instance(capture, session, index, stage)
-                            stage.rename(target)
-                    self.update_session(key, completed=index + 1)
+            if self.render_batch(key, origin, session, folder, stop) < session["count"]:
+                status = "paused"
         except Exception as exc:
             logger.exception("Card export session %s failed", key)
             status, error = "failed", str(exc)
