@@ -50,7 +50,16 @@ try {
   await dialog.getByLabel('Instances').fill('5');
   await dialog.getByRole('button',{name:'Create session'}).click();
   await button('Preview one instance').click();
-  await page.getByText('Expected OCR YAML',{exact:true}).waitFor();
+  const previewTabs = page.getByRole('tablist',{name:'Instance preview'});
+  const yamlTab = previewTabs.getByRole('tab',{name:'Expected OCR YAML'});
+  await yamlTab.click();
+  const yamlPanel = page.getByRole('tabpanel',{name:'Expected OCR YAML'});
+  await yamlPanel.getByRole('textbox',{name:'Expected OCR YAML'}).waitFor();
+  assert.ok(await yamlPanel.locator('.cm-line span[class]').count());
+  await yamlTab.press('ArrowRight');
+  const jsonPanel = page.getByRole('tabpanel',{name:'Expected Card Capture JSON'});
+  await jsonPanel.getByText('"Ada"',{exact:true}).waitFor();
+  assert.ok(await jsonPanel.locator('.cm-line span[class]').count());
   const saved = (await api('export/bundles')).find(item=>item.name===tag);
   exportId = saved.id;
   assert.deepEqual(saved.layouts.map(row=>row.bundle_id),[front.id,back.id]);

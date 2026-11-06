@@ -37,6 +37,13 @@ class CaptureExpectationTest(unittest.TestCase):
                 self.assertEqual(expected["issued_identifier"], "ABC0123")
                 self.assertNotIn("personal_number", expected)
 
+    def test_full_name_uses_structured_parts_only_when_they_match_printed_name(self):
+        identity = {"given_names": "Silas Grey", "family_name": "Bennett"}
+        expected = capture_expectation([words("NAME", "Silas", "Grey", "Bennett")], [identity])
+        self.assertEqual((expected["given_names"], expected["surnames"]), ("Silas Grey", "Bennett"))
+        expected = capture_expectation([words("NAME", "Someone", "Else")], [identity])
+        self.assertEqual((expected["given_names"], expected["surnames"]), ("", ""))
+
     def test_repeated_values_do_not_duplicate_and_conflicting_values_are_empty(self):
         self.assertEqual(capture_expectation([
             words("DOB", "01/01/2000") + words("NAME", "Ada"),

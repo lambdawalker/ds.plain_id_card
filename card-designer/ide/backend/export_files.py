@@ -28,9 +28,10 @@ CAPTURE_LABELS = {
 }
 
 
-def capture_expectation(layout_words):
+def capture_expectation(layout_words, identities=()):
     candidates = defaultdict(set)
-    for words in layout_words:
+    name_parts = defaultdict(set)
+    for index, words in enumerate(layout_words):
         fields = defaultdict(list)
         clipped = set()
         for word in words:
@@ -49,6 +50,19 @@ def capture_expectation(layout_words):
             value = " ".join(parts)
             if key not in clipped and value not in {"", "—", "–", "-"}:
                 candidates[key].add(value)
+                if key == "full_name" and index < len(identities):
+                    identity = identities[index]
+                    given = " ".join(identity.get("given_names", "").split())
+                    surname = " ".join(identity.get("family_name", "").split())
+                    if given and surname and value.casefold() == f"{given} {surname}".casefold():
+                        printed = value.split()
+                        boundary = len(given.split())
+                        name_parts["given_names"].add(" ".join(printed[:boundary]))
+                        name_parts["surnames"].add(" ".join(printed[boundary:]))
+    if len(candidates["full_name"]) == 1:
+        for key, values in name_parts.items():
+            if not candidates[key]:
+                candidates[key] = values
     expected = {key: next(iter(candidates[key])) if len(candidates[key]) == 1 else ""
                 for key in CAPTURE_FIELDS}
     if not candidates["full_name"] and expected["given_names"] and expected["surnames"]:
@@ -114,6 +128,7 @@ def render_instance(capture, session, index, target):
     sample = samples[index % len(samples)] if samples else ""
     result = {"instance": index + 1, "seed": seed, "sample": sample or None, "layouts": {}}
     layout_words = []
+    identities = []
     for layout in session["layouts"]:
         design = {**layout["design"], "seed": seed, "sample": sample}
         stem = layout["stem"]
@@ -123,6 +138,7 @@ def render_instance(capture, session, index, target):
             raise ValueError(f"Could not load images for {stem}: {', '.join(measured['broken_images'])}")
         words = measured["words"]
         layout_words.append(words)
+        identities.append(rendered.get("context", {}).get("identity", {}))
         fields = defaultdict(list)
         for word in words:
             if word["field"] and word["role"] == "value":
@@ -144,7 +160,7 @@ def render_instance(capture, session, index, target):
     )
 
     (target / CAPTURE_JSON).write_text(
-        json.dumps(capture_expectation(layout_words), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        json.dumps(capture_expectation(layout_words, identities), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
 
 

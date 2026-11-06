@@ -433,7 +433,7 @@
 <button class="primary icon-button" title="Save bundle (Ctrl+S)" aria-label="Save bundle" disabled={busy||!id||!bundleName.trim()} on:click={()=>act(save)}><Icon name="save"/></button>
 <button class="icon-button" title="Delete bundle" aria-label="Delete bundle" disabled={busy||!id} on:click={()=>act(remove)}><Icon name="delete"/></button>
 {/if}<span class="grow"></span><label>Theme <select bind:value={theme}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label></header>
-{#if exporterOpened}<div class="export-shell" hidden={workspace!=='exporter'}><CardExporter active={workspace==='exporter'}/></div>{/if}
+{#if exporterOpened}<div class="export-shell" hidden={workspace!=='exporter'}><CardExporter active={workspace==='exporter'} {dark}/></div>{/if}
 {#if workspace==='designer'}
 {#if id}
 <div class="toolbar"><label>Bundle <input bind:value={bundleName} maxlength="160" disabled={busy||!id}></label>

@@ -6,8 +6,19 @@
  import {html} from '@codemirror/lang-html';
  import {json} from '@codemirror/lang-json';
  import {css} from '@codemirror/lang-css';
+ import {yaml} from '@codemirror/lang-yaml';
+ import {StreamLanguage} from '@codemirror/language';
  import {formatSource} from './format-output.js';
  export let value='', language='html', change=()=>{}, label='',dark=false, readOnly=false;
+ const yolo=StreamLanguage.define({
+   token(stream){
+     if(stream.eatSpace())return null;
+     if(stream.match(/\d+(?:\.\d+)?(?=\s|$)/))return 'number';
+     stream.skipToEnd();
+     return 'string';
+   }
+ });
+ const languages={html,css,json,yaml,yolo:()=>yolo};
  const colors=new Compartment(),wrapping=new Compartment();
  let wordWrap=localStorage.getItem('wrap:'+label)==='true';
  function toggleWrap(){wordWrap=!wordWrap;localStorage.setItem('wrap:'+label,String(wordWrap))}
@@ -37,7 +48,7 @@
    return false;
  }
  onMount(()=>{
-   view=new EditorView({parent:host,doc:value,extensions:[EditorView.domEventHandlers({keydown:formatKey}),colors.of(dark?oneDark:[]),wrapping.of(wordWrap?EditorView.lineWrapping:[]),basicSetup,language==='css'?css():language==='json'?json():html(),EditorState.readOnly.of(readOnly),EditorView.editable.of(!readOnly),EditorView.contentAttributes.of({'aria-label':label,...(readOnly?{'role':'textbox','aria-readonly':'true',tabindex:'0'}:{})}),EditorView.updateListener.of(u=>{if(u.docChanged) change(u.state.doc.toString())})]});
+   view=new EditorView({parent:host,doc:value,extensions:[EditorView.domEventHandlers({keydown:formatKey}),colors.of(dark?oneDark:[]),wrapping.of(wordWrap?EditorView.lineWrapping:[]),basicSetup,(languages[language]??html)(),EditorState.readOnly.of(readOnly),EditorView.editable.of(!readOnly),EditorView.contentAttributes.of({'aria-label':label,...(readOnly?{'role':'textbox','aria-readonly':'true',tabindex:'0'}:{})}),EditorView.updateListener.of(u=>{if(u.docChanged) change(u.state.doc.toString())})]});
    return ()=>{view.destroy();view=null};
  });
  $: if(view)view.dispatch({effects:wrapping.reconfigure(wordWrap?EditorView.lineWrapping:[])});
