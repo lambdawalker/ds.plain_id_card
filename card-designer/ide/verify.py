@@ -21,8 +21,6 @@ class ReplayTest(unittest.TestCase):
 
     def test_bundle_crud_and_clone_are_atomic_and_independent(self):
         with tempfile.TemporaryDirectory() as temp, patch.object(service, "DB", Path(temp) / "test.db"):
-            with service.database() as db:
-                db.execute("CREATE TABLE bundle(id INTEGER PRIMARY KEY, payload TEXT NOT NULL)")
             bundle = service.Bundle(name="Test bundle", layouts=[self.design, self.design])
             original = service.create_bundle(bundle)["id"]
             draft = bundle.model_copy(deep=True)
@@ -40,15 +38,13 @@ class ReplayTest(unittest.TestCase):
             with service.database() as db:
                 db.execute("CREATE TABLE design(id INTEGER PRIMARY KEY, payload TEXT NOT NULL)")
                 db.execute("INSERT INTO design(payload) VALUES (?)", (self.design.model_dump_json(),))
-            with service.database() as db:
-                service.initialize_bundles(db)
+            service.initialize_bundle_storage()
             migrated = service.list_bundles()[0]["id"]
             self.assertEqual(service.read_bundle(migrated)["layouts"][0]["template"], self.design.template)
             self.assertTrue(any(row["layout_count"] == 2 for row in service.list_bundles()))
             service.delete_bundle(migrated)
             remaining = service.list_bundles()
-            with service.database() as db:
-                service.initialize_bundles(db)
+            service.initialize_bundle_storage()
             self.assertEqual(service.list_bundles(), remaining)
 
     def test_legacy_a_renders(self):

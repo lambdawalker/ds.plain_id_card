@@ -48,8 +48,6 @@ class TemplateCatalogTest(unittest.TestCase):
         import tempfile
         from unittest.mock import patch
         with tempfile.TemporaryDirectory() as tmp, patch.object(service, 'DB', Path(tmp) / 'design.db'):
-            with service.database() as db:
-                db.execute('CREATE TABLE bundle(id INTEGER PRIMARY KEY, payload TEXT NOT NULL)')
             design = service.Design(**service.open_template('C'), seed=42, color='#a4d5c8', background='plain')
             key = service.create_bundle(service.Bundle(name="Test bundle", layouts=[design]))['id']
             saved = service.Design.model_validate(service.read_bundle(key)["layouts"][0])

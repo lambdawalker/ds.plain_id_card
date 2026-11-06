@@ -7,10 +7,13 @@ import random
 import sqlite3
 import secrets
 from uuid import uuid4
-from contextlib import closing, asynccontextmanager, contextmanager
+from contextlib import closing, asynccontextmanager, contextmanager, suppress
+from tempfile import NamedTemporaryFile
 from concurrent.futures import Future, TimeoutError as FutureTimeout
 from queue import Queue, Empty
 from pathlib import Path
+
+import yaml
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
@@ -122,7 +125,6 @@ def insert_bundle(db, bundle):
 
 
 def initialize_bundles(db):
-    db.execute("BEGIN IMMEDIATE")
     tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     if "bundle" in tables:
         return
@@ -132,16 +134,16 @@ def initialize_bundles(db):
             layout = Design.model_validate_json(row[0])
             insert_bundle(db, Bundle(name=layout.name if layout.name.strip() else "Imported bundle", layouts=[layout]))
     for bundle in template_bundles():
-        install_stock_bundle(db, bundle)
+        insert_bundle(db, stock_bundle(bundle))
 
 
-def install_stock_bundle(db, bundle):
+def stock_bundle(bundle):
     defaults = {"seed": 42, "color": "#a4d5c8", "background": "type-b", "auto_theme": True,
                 **bundle.get("defaults", {})}
     layouts = [Design(**template_source(item["id"]), **defaults) for item in bundle["templates"]]
     saved = Bundle(name=bundle["name"], layouts=layouts)
     assign_layout_ids(saved)
-    return insert_bundle(db, saved)
+    return saved
 
 
 def upgrade_stock_layouts(db):
@@ -178,7 +180,7 @@ def assign_layout_ids(bundle):
         seen.add(layout.layout_id)
 
 
-with closing(database()) as db, db:
+def upgrade_legacy_bundles(db):
     initialize_bundles(db)
     upgrade_stock_layouts(db)
     if db.execute("PRAGMA user_version").fetchone()[0] < 2:
@@ -193,16 +195,114 @@ with closing(database()) as db, db:
             "WHERE json_extract(layout.value, '$.template_id') = 'GA-front' LIMIT 1"
         ).fetchone()
         if installed is None:
-            install_stock_bundle(db, next(item for item in template_bundles() if item["id"] == "georgia-a"))
+            insert_bundle(db, stock_bundle(next(item for item in template_bundles() if item["id"] == "georgia-a")))
         db.execute("PRAGMA user_version=3")
 
 
+class BundleDumper(yaml.SafeDumper):
+    pass
 
-def load_bundle(db, key):
-    row = db.execute("SELECT payload FROM bundle WHERE id=?", (key,)).fetchone()
-    if row is None:
+
+BundleDumper.add_representer(
+    str, lambda dumper, value: dumper.represent_scalar(
+        "tag:yaml.org,2002:str", value, style="|" if "\n" in value else None
+    )
+)
+
+
+def bundle_root():
+    root = DB.parent / "bundles"
+    if root.is_symlink():
+        raise RuntimeError(f"Bundle storage must be a directory: {root}")
+    return root
+
+
+def bundle_file(key):
+    folder = bundle_root() / str(key)
+    path = folder / "bundle.yaml"
+    if key <= 0 or folder.is_symlink() or path.is_symlink():
         raise HTTPException(404, "Bundle was deleted")
-    return Bundle.model_validate_json(row[0])
+    return path
+
+
+def atomic_write(path, contents):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with NamedTemporaryFile(dir=path.parent, delete=False, mode="w", encoding="utf-8", newline="\n") as file:
+        temporary = Path(file.name)
+        try:
+            file.write(contents)
+            file.close()
+            temporary.replace(path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
+def write_bundle(key, bundle):
+    atomic_write(bundle_file(key), yaml.dump(bundle.model_dump(mode="json"), Dumper=BundleDumper,
+                                            allow_unicode=True, sort_keys=False, width=120))
+
+
+def bundle_keys():
+    names = (path.parent.name for path in bundle_root().glob("*/bundle.yaml")
+             if not path.parent.is_symlink() and not path.is_symlink() and path.is_file())
+    return sorted(int(name) for name in names if name.isascii() and name.isdecimal() and name[0] != "0")
+
+
+def initialize_bundle_storage():
+    with closing(database()) as db, db:
+        db.execute("BEGIN IMMEDIATE")
+        if db.execute("PRAGMA user_version").fetchone()[0] >= 4:
+            return
+        counter = bundle_root() / ".next-id"
+        tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        sequence = None
+        if tables.intersection({"bundle", "design"}):
+            upgrade_legacy_bundles(db)
+            records = [(key, Bundle.model_validate_json(payload))
+                       for key, payload in db.execute("SELECT id,payload FROM bundle ORDER BY id")]
+            if "sqlite_sequence" in tables or "bundle" not in tables:
+                sequence = db.execute("SELECT seq FROM sqlite_sequence WHERE name='bundle'").fetchone()
+        elif counter.exists():
+            records = []
+        else:
+            records = [(key, stock_bundle(item)) for key, item in enumerate(template_bundles(), 1)]
+        for key, bundle in records:
+            if not bundle_file(key).exists():
+                write_bundle(key, bundle)
+        next_id = max(next_bundle_id(), sequence[0] + 1 if sequence else 1)
+        atomic_write(counter, f"{next_id}\n")
+        db.execute("PRAGMA user_version=4")
+
+
+def next_bundle_id():
+    counter = bundle_root() / ".next-id"
+    return max(int(counter.read_text(encoding="utf-8")) if counter.exists() else 1,
+               max(bundle_keys(), default=0) + 1)
+
+
+def add_bundle(bundle):
+    key = next_bundle_id()
+    atomic_write(bundle_root() / ".next-id", f"{key + 1}\n")
+    write_bundle(key, bundle)
+    return key
+
+
+def load_bundle(key):
+    path = bundle_file(key)
+    try:
+        bundle = Bundle.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
+        ids = {layout.layout_id for layout in bundle.layouts}
+        if ids.intersection({None, ""}) or len(ids) != len(bundle.layouts):
+            raise ValueError("Each layout must have a unique, non-empty layout_id")
+        return bundle
+    except FileNotFoundError as exc:
+        raise HTTPException(404, "Bundle was deleted") from exc
+    except (yaml.YAMLError, ValueError, OSError) as exc:
+        logger.warning("Invalid bundle file %s: %s", path, exc)
+        raise HTTPException(422, f"Invalid bundle file: {path}") from exc
+
+
+initialize_bundle_storage()
 
 
 def bundle_response(key, bundle):
@@ -210,6 +310,7 @@ def bundle_response(key, bundle):
 
 
 def prepare_bundle(bundle):
+    bundle.layouts = [layout.model_copy() for layout in bundle.layouts]
     assign_layout_ids(bundle)
     bundle.layouts = [prepare_design(layout) for layout in bundle.layouts]
     return bundle
@@ -217,36 +318,40 @@ def prepare_bundle(bundle):
 
 @app.get("/api/bundles")
 def list_bundles():
-    with closing(database()) as db:
-        return [
-            dict(id=row[0], name=row[1], layout_count=row[2])
-            for row in db.execute(
-                "SELECT id, json_extract(payload,'$.name'), json_array_length(payload,'$.layouts') "
-                "FROM bundle ORDER BY id"
-            )
-        ]
+    items = []
+    for key in bundle_keys():
+        try:
+            bundle = load_bundle(key)
+        except HTTPException as exc:
+            if exc.status_code == 422:
+                items.append(dict(id=key, name=f"Invalid bundle ({key})", layout_count=0))
+            continue
+        items.append(dict(id=key, name=bundle.name, layout_count=len(bundle.layouts)))
+    return items
 
 
 @app.get("/api/bundles/{key}")
 def read_bundle(key: int):
-    with closing(database()) as db:
-        return bundle_response(key, prepare_bundle(load_bundle(db, key)))
+    return bundle_response(key, prepare_bundle(load_bundle(key)))
 
 
 @app.post("/api/bundles")
 def create_bundle(bundle: Bundle):
     bundle = prepare_bundle(bundle)
     with closing(database()) as db, db:
-        return bundle_response(insert_bundle(db, bundle), bundle)
+        # Serialize file writes across Studio processes using the existing database lock.
+        db.execute("BEGIN IMMEDIATE")
+        return bundle_response(add_bundle(bundle), bundle)
 
 
 @app.put("/api/bundles/{key}")
 def update_bundle(key: int, bundle: Bundle):
     bundle = prepare_bundle(bundle)
     with closing(database()) as db, db:
-        result = db.execute("UPDATE bundle SET payload=? WHERE id=?", (bundle.model_dump_json(), key))
-        if result.rowcount == 0:
+        db.execute("BEGIN IMMEDIATE")
+        if not bundle_file(key).is_file():
             raise HTTPException(404, "Bundle was deleted")
+        write_bundle(key, bundle)
     return bundle_response(key, bundle)
 
 
@@ -254,17 +359,23 @@ def update_bundle(key: int, bundle: Bundle):
 def clone_bundle(key: int, draft: Bundle | None = None):
     with closing(database()) as db, db:
         db.execute("BEGIN IMMEDIATE")
-        original = load_bundle(db, key)
+        original = load_bundle(key)
         copy = prepare_bundle((draft if draft is not None else original).model_copy(deep=True))
         copy.name = copy.name[:155] + " copy"
-        return bundle_response(insert_bundle(db, copy), copy)
+        return bundle_response(add_bundle(copy), copy)
 
 
 @app.delete("/api/bundles/{key}")
 def delete_bundle(key: int):
     with closing(database()) as db, db:
-        if db.execute("DELETE FROM bundle WHERE id=?", (key,)).rowcount == 0:
-            raise HTTPException(404, "Bundle was deleted")
+        db.execute("BEGIN IMMEDIATE")
+        path = bundle_file(key)
+        try:
+            path.unlink()
+        except FileNotFoundError as exc:
+            raise HTTPException(404, "Bundle was deleted") from exc
+        with suppress(OSError):
+            path.parent.rmdir()
     return {"deleted": key}
 
 

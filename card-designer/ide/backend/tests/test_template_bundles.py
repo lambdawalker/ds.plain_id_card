@@ -63,8 +63,6 @@ class TemplateBundleTest(unittest.TestCase):
         source = service.open_template('A-right')
         design = service.Design(**source,seed=123,color='#ffffff',background='plain')
         with tempfile.TemporaryDirectory() as directory, patch.object(service,'DB',Path(directory)/'design.db'):
-            with service.database() as db:
-                db.execute('CREATE TABLE bundle(id INTEGER PRIMARY KEY,payload TEXT NOT NULL)')
             key=service.create_bundle(service.Bundle(name="Test bundle", layouts=[design]))['id']
             saved=service.Design.model_validate(service.read_bundle(key)["layouts"][0])
             self.assertEqual(saved.bundle_id,'horizontal-identity')

@@ -83,15 +83,18 @@ class Exporter:
             """)
             db.execute("UPDATE export_session SET status='paused' WHERE status IN ('running', 'pausing')")
 
-    def resolve_layouts(self, db, bundle):
+    def resolve_layouts(self, bundle):
         layouts = []
+        sources = {}
         names = set()
         for reference in bundle.layouts:
             validate_filename(reference.stem)
             if reference.stem.casefold() in names:
                 raise HTTPException(422, "Layout output names must be unique")
             names.add(reference.stem.casefold())
-            source = self.load_bundle(db, reference.bundle_id)
+            if reference.bundle_id not in sources:
+                sources[reference.bundle_id] = self.load_bundle(reference.bundle_id)
+            source = sources[reference.bundle_id]
             design = next((layout for layout in source.layouts if layout.layout_id == reference.layout_id), None)
             if design is None:
                 raise HTTPException(422, f"Layout for {reference.stem} is no longer available")
@@ -105,13 +108,13 @@ class Exporter:
 
     def create_bundle(self, bundle: ExportBundle):
         with closing(self.database()) as db, db:
-            self.resolve_layouts(db, bundle)
+            self.resolve_layouts(bundle)
             key = db.execute("INSERT INTO export_bundle(payload) VALUES (?)", (bundle.model_dump_json(),)).lastrowid
         return dict(id=key, **bundle.model_dump())
 
     def update_bundle(self, key: int, bundle: ExportBundle):
         with closing(self.database()) as db, db:
-            self.resolve_layouts(db, bundle)
+            self.resolve_layouts(bundle)
             if not db.execute("UPDATE export_bundle SET payload=? WHERE id=?", (bundle.model_dump_json(), key)).rowcount:
                 raise HTTPException(404, "Export bundle was deleted")
         return dict(id=key, **bundle.model_dump())
@@ -163,7 +166,7 @@ class Exporter:
             db.execute("BEGIN IMMEDIATE")
             row = load_row(db, "export_bundle", settings.bundle_id)
             bundle = ExportBundle.model_validate_json(row["payload"])
-            layouts = self.resolve_layouts(db, bundle)
+            layouts = self.resolve_layouts(bundle)
             session = {**settings.model_dump(), "bundle_name": bundle.name, "samples": samples,
                        "layouts": layouts, "classes": class_names(layouts)}
             if db.execute("SELECT 1 FROM export_session WHERE folder=?", (settings.folder,)).fetchone():

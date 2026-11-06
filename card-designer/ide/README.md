@@ -33,6 +33,12 @@ The dataset browser starts empty until real sources are connected. To browse rea
 
 The API indexes JPEG, PNG and WebP files recursively at startup. The filename stem is the display name and the relative path determines a stable record ID. Select a record in **Data sources**; its ID and photo URL appear in Context. Restart the server after adding files. Open the gear-shaped **Background settings** panel and use **Artwork** to import a separate background. SQLite and imported artwork live under data/; set CARD_DATA to relocate them.
 
+### Editing design bundle files
+
+Studio saves each design bundle in `CARD_DATA/bundles/<id>/bundle.yaml` (`ide/data/bundles` by default). Open the YAML file to edit the bundle name, layout order, or layout settings. The `template` and `css` fields contain the source as multiline text. Reopen the bundle in Studio to load your edits. Save or close any open Studio draft before editing the file, since saving an older draft replaces the file.
+
+Keep the numeric folder name and each layout's `layout_id` when editing an existing bundle. Card Exporter uses those IDs to find the layouts. Give any manually added layout a unique, non-empty `layout_id` within the bundle. Studio imports legacy SQLite design bundles once and keeps their database records as a backup. Back up the whole `bundles` directory, including `.next-id`, to preserve the bundle IDs across restores.
+
 ## Card Exporter
 
 Open **Card Exporter** in the top bar. In **Export bundles**, add layouts from any saved Designer bundle, give each a unique output name such as `front` or `back`, and order the layouts. Save the pairing, then choose **New session**. Each session stores its own layout snapshot, seed, record order and output folder. Editing the pairing or the original layouts affects future sessions.
