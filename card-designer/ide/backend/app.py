@@ -107,63 +107,104 @@ def database():
     return db
 
 
+class Bundle(BaseModel):
+    name: str = Field(min_length=1, max_length=160, pattern=r"\S")
+    layouts: list[Design] = Field(min_length=1)
+
+
+def insert_bundle(db, bundle):
+    return db.execute("INSERT INTO bundle(payload) VALUES (?)", (bundle.model_dump_json(),)).lastrowid
+
+
+def initialize_bundles(db):
+    db.execute("BEGIN IMMEDIATE")
+    tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "bundle" in tables:
+        return
+    db.execute("CREATE TABLE bundle(id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL)")
+    if "design" in tables:
+        for row in db.execute("SELECT payload FROM design ORDER BY id"):
+            layout = Design.model_validate_json(row[0])
+            insert_bundle(db, Bundle(name=layout.name if layout.name.strip() else "Imported bundle", layouts=[layout]))
+    for bundle in template_bundles():
+        layouts = [
+            Design(**template_source(item["id"]), seed=42, color="#a4d5c8",
+                   background="type-b", auto_theme=True)
+            for item in bundle["templates"]
+        ]
+        insert_bundle(db, Bundle(name=bundle["name"], layouts=layouts))
+
+
 with closing(database()) as db, db:
-    db.execute("CREATE TABLE IF NOT EXISTS design(id INTEGER PRIMARY KEY, payload TEXT NOT NULL)")
+    initialize_bundles(db)
 
 
-def load(db, key):
-    row = db.execute("SELECT payload FROM design WHERE id=?", (key,)).fetchone()
-    if not row:
-        raise HTTPException(404, "Design was deleted")
-    return prepare_design(Design.model_validate_json(row[0]))
+def load_bundle(db, key):
+    row = db.execute("SELECT payload FROM bundle WHERE id=?", (key,)).fetchone()
+    if row is None:
+        raise HTTPException(404, "Bundle was deleted")
+    return Bundle.model_validate_json(row[0])
 
 
-def insert(db, design):
-    design = prepare_design(design)
-    return db.execute("INSERT INTO design(payload) VALUES (?)", (design.model_dump_json(),)).lastrowid
+def bundle_response(key, bundle):
+    return {"id": key, **bundle.model_dump()}
 
 
-@app.get("/api/designs")
-def designs():
+def prepare_bundle(bundle):
+    bundle.layouts = [prepare_design(layout) for layout in bundle.layouts]
+    return bundle
+
+
+@app.get("/api/bundles")
+def list_bundles():
     with closing(database()) as db:
-        return [dict(id=row[0], name=row[1]) for row in db.execute(
-            "SELECT id, json_extract(payload,'$.name') FROM design ORDER BY id")]
+        return [
+            dict(id=row[0], name=row[1], layout_count=row[2])
+            for row in db.execute(
+                "SELECT id, json_extract(payload,'$.name'), json_array_length(payload,'$.layouts') "
+                "FROM bundle ORDER BY id"
+            )
+        ]
 
 
-@app.get("/api/designs/{key}")
-def read(key: int):
+@app.get("/api/bundles/{key}")
+def read_bundle(key: int):
     with closing(database()) as db:
-        return load(db, key)
+        return bundle_response(key, prepare_bundle(load_bundle(db, key)))
 
 
-@app.post("/api/designs")
-def create(design: Design):
+@app.post("/api/bundles")
+def create_bundle(bundle: Bundle):
+    bundle = prepare_bundle(bundle)
     with closing(database()) as db, db:
-        return {"id": insert(db, design), "template_parameters": design.template_parameters, "bundle_id": design.bundle_id}
+        return bundle_response(insert_bundle(db, bundle), bundle)
 
 
-@app.put("/api/designs/{key}")
-def update(key: int, design: Design):
-    design = prepare_design(design)
+@app.put("/api/bundles/{key}")
+def update_bundle(key: int, bundle: Bundle):
+    bundle = prepare_bundle(bundle)
     with closing(database()) as db, db:
-        load(db, key)
-        db.execute("UPDATE design SET payload=? WHERE id=?", (design.model_dump_json(), key))
-    return {"id": key, "template_parameters": design.template_parameters, "bundle_id": design.bundle_id}
+        result = db.execute("UPDATE bundle SET payload=? WHERE id=?", (bundle.model_dump_json(), key))
+        if result.rowcount == 0:
+            raise HTTPException(404, "Bundle was deleted")
+    return bundle_response(key, bundle)
 
 
-@app.post("/api/designs/{key}/clone")
-def clone(key: int):
+@app.post("/api/bundles/{key}/clone")
+def clone_bundle(key: int, draft: Bundle | None = None):
     with closing(database()) as db, db:
-        design = load(db, key)
-        design.name = design.name[:155] + " copy"
-        return {"id": insert(db, design), "template_parameters": design.template_parameters, "bundle_id": design.bundle_id}
+        db.execute("BEGIN IMMEDIATE")
+        original = load_bundle(db, key)
+        copy = prepare_bundle((draft if draft is not None else original).model_copy(deep=True))
+        copy.name = copy.name[:155] + " copy"
+        return bundle_response(insert_bundle(db, copy), copy)
 
 
-@app.delete("/api/designs/{key}")
-def delete(key: int):
+@app.delete("/api/bundles/{key}")
+def delete_bundle(key: int):
     with closing(database()) as db, db:
-        load(db, key)
-        db.execute("DELETE FROM design WHERE id=?", (key,))
+        if db.execute("DELETE FROM bundle WHERE id=?", (key,)).rowcount == 0:
+            raise HTTPException(404, "Bundle was deleted")
     return {"deleted": key}
 
 

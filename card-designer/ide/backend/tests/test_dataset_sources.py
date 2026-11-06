@@ -102,7 +102,6 @@ class DatasetSourcesTest(unittest.TestCase):
                     pending = service.datasets()
                     self.assertEqual(pending[0]["reference"], str(root))
                     self.assertTrue(pending[0]["loading"])
-                    self.assertEqual(service.designs(), [])
                     release.set()
                     await asyncio.to_thread(service.app.state.dataset_thread.join, 2)
                     self.assertFalse(service.dataset_status()["loading"])
