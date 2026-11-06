@@ -347,6 +347,7 @@
        <details open><summary>{image.name}</summary><img class="export-image" src={image.src} alt={image.name}><pre>{image.yolo}</pre></details>
       {/each}
       <details><summary>Expected OCR YAML</summary><pre>{preview.ocr}</pre></details>
+      <details><summary>Expected Card Capture JSON</summary><pre>{preview.card_capture}</pre></details>
       <details><summary>YOLO class map</summary><pre>{preview.classes.map((name,index)=>index+' '+name).join('\n')}</pre></details>
      {/if}
      {#if output}

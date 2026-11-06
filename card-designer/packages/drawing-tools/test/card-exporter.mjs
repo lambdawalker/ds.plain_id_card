@@ -72,7 +72,12 @@ try {
   await page.getByRole('link',{name:'expected-ocr.yaml',exact:true}).waitFor();
   const prefix = base+'/api/export/sessions/'+firstSession.id+'/instances/1';
   const listing = await (await page.request.get(prefix)).json();
-  assert.deepEqual(listing.files,['back.png','back.txt','expected-ocr.yaml','front.png','front.txt']);
+  assert.deepEqual(listing.files,['back.png','back.txt','expected-card-capture.json','expected-ocr.yaml','front.png','front.txt']);
+  const expected = await (await page.request.get(prefix+'/expected-card-capture.json')).json();
+  assert.deepEqual(expected, {
+    full_name: 'Ada', given_names: '', surnames: '', birth_date: '', document_number: '',
+    personal_number: '', address: '', issue_date: '', expiry_date: '', issuing_country: ''
+  });
   const ocr = await (await page.request.get(prefix+'/expected-ocr.yaml')).text();
   assert.match(ocr,/front:[\s\S]*NAME: Ada[\s\S]*back:[\s\S]*NAME: Ada/);
   assert.doesNotMatch(ocr,/Changed/);
