@@ -1,4 +1,4 @@
-<div class="card bundle-card">
+<div class="card">
   <header class="card-header">
     <div class="title-section">
       <h1>{{ common.get('card_title') or identity.document_type or 'IDENTITY CARD' }}</h1>
@@ -16,40 +16,40 @@
     </div>
     <div class="identity-details">
       <div class="field-grid">
-        <div class="data-item name full">
-          <label>NAME</label>
+        <div class="card-field field-name field-full">
+          <span class="field-label">NAME</span>
           <p>{{ identity.full_name or '—' }}</p>
         </div>
-        <div class="data-item ">
-          <label>DOCUMENT NUMBER</label>
+        <div class="card-field">
+          <span class="field-label">DOCUMENT NUMBER</span>
           <p>{{ identity.document_number or '—' }}</p>
         </div>
-        <div class="data-item ">
-          <label>NATIONALITY</label>
+        <div class="card-field">
+          <span class="field-label">NATIONALITY</span>
           <p>{{ identity.nationality or '—' }}</p>
         </div>
-        <div class="data-item address full">
-          <label>ADDRESS</label>
+        <div class="card-field field-address field-full">
+          <span class="field-label">ADDRESS</span>
           <p>{{ identity.address_line1 or '—' }}</p>
           {% if identity.address_line2 %}
           <p>{{ identity.address_line2 }}</p>
           {% endif %}
         </div>
-        <div class="data-item ">
-          <label>EMAIL</label>
+        <div class="card-field">
+          <span class="field-label">EMAIL</span>
           <p>{{ identity.email or '—' }}</p>
         </div>
-        <div class="data-item ">
-          <label>PHONE</label>
+        <div class="card-field">
+          <span class="field-label">PHONE</span>
           <p>{{ identity.phone_number or '—' }}</p>
         </div>
-        <div class="dates full">
-          <div class="data-item issued">
-            <label>ISSUED</label>
+        <div class="field-pair validity-dates field-full">
+          <div class="card-field field-issued">
+            <span class="field-label">ISSUED</span>
             <p>{{ identity.issue_date or '—' }}</p>
           </div>
-          <div class="data-item expires">
-            <label>EXPIRES</label>
+          <div class="card-field field-expires">
+            <span class="field-label">EXPIRES</span>
             <p>{{ identity.expiry_date or '—' }}</p>
           </div>
         </div>

@@ -17,9 +17,10 @@ async root => {
         const element = node.parentElement;
         if (element.closest('style, script, template') || !visible(element)) continue;
         const field = element.closest('[data-field]')?.dataset.field;
-        let label = element.closest('label');
+        const labelSelector = '.field-label, label';
+        let label = element.closest(labelSelector);
         for (let parent = element; !label && parent !== root; parent = parent.parentElement) {
-            label = [...parent.children].find(child => child.tagName === 'LABEL');
+            label = [...parent.children].find(child => child.matches(labelSelector));
         }
         const style = getComputedStyle(element);
         const clip = [0, 0, origin.width, origin.height];
@@ -46,7 +47,7 @@ async root => {
             const clipped = boxes.some(([left, top, right, bottom]) =>
                 left < clip[0] - 1 || top < clip[1] - 1 || right > clip[2] + 1 || bottom > clip[3] + 1);
             words.push({text: match[0], field: field ?? label?.innerText ?? null,
-                role: element.closest('label') ? 'label' : 'value', boxes, clipped});
+                role: element.closest(labelSelector) ? 'label' : 'value', boxes, clipped});
         }
     }
     return {elements, words, fonts: [...fonts].sort(),

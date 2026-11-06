@@ -100,7 +100,7 @@ try {
             w: r.width,
             h: r.height,
             text: img.className,
-            decorative: img.classList.contains("small-photo"),
+            decorative: img.classList.contains("portrait-watermark"),
             element: img,
           });
         }
@@ -110,7 +110,7 @@ try {
           const photo = root
               .querySelector(".main-photo")
               .getBoundingClientRect(),
-            mark = root.querySelector(".small-photo").getBoundingClientRect();
+            mark = root.querySelector(".portrait-watermark").getBoundingClientRect();
           const onOppositeSide =
             mark.right <= photo.left || mark.left >= photo.right;
           if (
@@ -126,24 +126,24 @@ try {
             throw Error("Explicit A portrait side changed with seed");
           if (!onOppositeSide)
             throw Error("A watermark must be opposite the main portrait");
-          const watermark = root.querySelector(".small-photo-container");
+          const watermark = root.querySelector(".portrait-watermark-layer");
           if (
             Number(
-              getComputedStyle(root.querySelector(".small-photo")).opacity,
+              getComputedStyle(root.querySelector(".portrait-watermark")).opacity,
             ) > 0.2 ||
             Number(getComputedStyle(watermark).zIndex) >=
               Number(
-                getComputedStyle(root.querySelector(".name-holder")).zIndex,
+                getComputedStyle(root.querySelector(".primary-fields")).zIndex,
               )
           )
             throw Error("A watermark must stay faint and below text");
           const order = [
-            ".name",
-            ".date",
-            ".address",
-            ".key-voter",
-            ".key-curp",
-            ".bottom-row",
+            ".field-name",
+            ".birth-date",
+            ".field-address",
+            ".document-number",
+            ".supplemental-fields",
+            ".validity-dates",
           ].map(
             (selector) =>
               root.querySelector(selector).getBoundingClientRect().top,

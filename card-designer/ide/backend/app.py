@@ -1,6 +1,7 @@
 import os
 import asyncio
 import logging
+import json
 from hashlib import sha256
 import random
 import sqlite3
@@ -135,8 +136,35 @@ def initialize_bundles(db):
         insert_bundle(db, Bundle(name=bundle["name"], layouts=layouts))
 
 
+def upgrade_stock_layouts(db):
+    """Replace known stock sources once, leaving user-edited source pairs alone."""
+    if db.execute("PRAGMA user_version").fetchone()[0] >= 1:
+        return
+    fingerprints = json.loads(Path(__file__).with_name("stock_layout_v1.json").read_text(encoding="utf-8"))
+    sources = {}
+    for key, payload in db.execute("SELECT id, payload FROM bundle").fetchall():
+        bundle = Bundle.model_validate_json(payload)
+        changed = False
+        for layout in bundle.layouts:
+            expected = fingerprints.get(layout.template_id)
+            if expected is None:
+                continue
+            actual = [sha256(getattr(layout, field).encode()).hexdigest() for field in ("template", "css")]
+            if actual != expected:
+                continue
+            if layout.template_id not in sources:
+                sources[layout.template_id] = template_source(layout.template_id)
+            source = sources[layout.template_id]
+            layout.template, layout.css = source["template"], source["css"]
+            changed = True
+        if changed:
+            db.execute("UPDATE bundle SET payload=? WHERE id=?", (bundle.model_dump_json(), key))
+    db.execute("PRAGMA user_version = 1")
+
+
 with closing(database()) as db, db:
     initialize_bundles(db)
+    upgrade_stock_layouts(db)
 
 
 def load_bundle(db, key):
