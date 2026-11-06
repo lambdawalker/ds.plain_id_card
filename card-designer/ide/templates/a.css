@@ -1,10 +1,9 @@
 body { font: 13px system-ui; color: #193837; }
 .card { padding: 18px; }
-.card-body, .data-group, .key-curp { display: flex; gap: 12px; }
+.identity-body, .field-pair { display: flex; gap: 12px; }
 .main-photo { width: 125px; height: 165px; display: grid; place-items: center; background: #244c49; color: white; }
-.data-section { flex: 1; display: flex; flex-direction: column; }
-.name-holder { display: flex; align-items: center; justify-items: stretch; flex-direction: row; }
-.name-holder > div { flex-grow: 1; }
+.identity-details { flex: 1; display: flex; flex-direction: column; }
+.primary-fields { display: flex; align-items: center; }
+.primary-fields > div { flex-grow: 1; }
 p, h1, h2 { margin: 2px; }
-label { font-size: 10px; }
-.card-body { flex-direction: row; }
+.field-label { font-size: 10px; }
