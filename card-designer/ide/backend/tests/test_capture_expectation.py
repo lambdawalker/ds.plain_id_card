@@ -51,3 +51,7 @@ class CaptureExpectationTest(unittest.TestCase):
         ])["birth_date"], "01/01/2000")
         self.assertEqual(capture_expectation([words("NAME", "Ada"), words("NAME", "Grace")])["full_name"], "")
         self.assertIn("expected-card-capture.json", expected_files([{"stem": "front"}]))
+
+    def test_disabled_artifacts_are_excluded_from_expected_files(self):
+        outputs = {"images": False, "yolo": False, "ocr": False, "card_capture": True}
+        self.assertEqual(expected_files([{"stem": "front"}], "png", outputs), {"expected-card-capture.json"})

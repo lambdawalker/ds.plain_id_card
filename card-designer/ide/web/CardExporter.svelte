@@ -1,18 +1,28 @@
 <script>
  import {onMount} from 'svelte';
  import Editor from './Editor.svelte';
+ import Icon from './Icon.svelte';
  import {api, renderCard} from './render.js';
 
  export let active = true, dark = false;
- let previewTab = 0, sessionSplit = 62, resizing = false;
+ let previewTab = 0, editingSession = null, sessionPicker;
+ const outputOptions = [
+   {key:'images', label:'Card images'},
+   {key:'yolo', label:'YOLO labels and class map'},
+   {key:'ocr', label:'Expected OCR YAML'},
+   {key:'card_capture', label:'Expected Card Capture JSON'},
+ ];
+ const defaultOutputs = () => Object.fromEntries(outputOptions.map(({key})=>[key,true]));
  $: instance = output ?? preview;
  $: previewTabs = instance ? [
    ...instance.images.map(image => ({label:image.name, image, language:'yolo', value:image.yolo,
-     files:[image.name, image.name.replace(/\.[^.]+$/, '.txt')]})),
-   {label:'Expected OCR YAML', language:'yaml', value:instance.ocr, files:['expected-ocr.yaml']},
+     files:[...(image.src ? [image.name] : []),
+       ...(image.yolo == null ? [] : [image.name.replace(/\.[^.]+$/, '.txt')])]})),
+   ...(instance.ocr == null ? [] : [{label:'Expected OCR YAML', language:'yaml', value:instance.ocr, files:['expected-ocr.yaml']}]),
    ...(instance.card_capture == null ? [] : [{label:'Expected Card Capture JSON', language:'json',
      value:instance.card_capture, files:['expected-card-capture.json']}]),
-   {label:'YOLO class map', language:'yolo', value:instance.classes.map((name,index)=>index+' '+name).join('\n'), files:[]},
+   ...(instance.classes == null ? [] : [{label:'YOLO class map', language:'yolo',
+     value:instance.classes.map((name,index)=>index+' '+name).join('\n'), files:[]}]),
  ] : [];
  $: selectedPreview = previewTabs[previewTab];
  let view = 'bundles';
@@ -177,17 +187,28 @@
    sources = await api('export/sources');
    const preferred = draft?.id ?? bundles[0]?.id;
    if (!preferred) throw Error('Save an export bundle first.');
+   editingSession = null;
    const name = 'Dataset ' + (sessions.length + 1);
    settings = {name, bundle_id: preferred, source: sources.find(item => item.id !== 'none')?.id ?? 'none',
-     count: 100, seed: 42, image_format:'png', folder: 'dataset-' + Date.now()};
+     count: 100, seed: 42, image_format:'png', outputs:defaultOutputs(), folder: 'dataset-' + Date.now()};
    sessionDialog.showModal();
  }
 
- async function createSession() {
-   const created = await api('export/sessions', 'POST', settings);
-   sessions = [created, ...sessions];
+ async function editExportSession() {
+   sources = await api('export/sources');
+   editingSession = session.id;
+   const {name, bundle_id, source, count, seed, image_format, folder, outputs} = session;
+   settings = {name, bundle_id, source, count, seed, image_format, folder, outputs:clean(outputs ?? defaultOutputs())};
+   sessionDialog.showModal();
+ }
+
+ async function saveExportSession() {
+   const saved = editingSession === null
+     ? await api('export/sessions', 'POST', settings)
+     : await api('export/sessions/' + editingSession, 'PUT', settings);
+   sessions = editingSession === null ? [saved,...sessions] : sessions.map(item=>item.id===saved.id ? saved : item);
    sessionDialog.close();
-   openSession(created.id);
+   openSession(saved.id);
    view = 'sessions';
  }
 
@@ -206,23 +227,6 @@
 
  async function rerunExportSession() {
    if (window.confirm('Rerun this export session from the beginning in a new output folder?')) await command('rerun');
- }
-
- function moveSessionDivider(event) {
-   if (!resizing) return;
-   const bounds = event.currentTarget.parentElement.getBoundingClientRect();
-   setSessionSplit(100 * (event.clientX - bounds.left) / bounds.width);
- }
-
- function setSessionSplit(value) {
-   sessionSplit = Math.max(25, Math.min(75, value));
- }
-
- function sessionDividerKey(event) {
-   const positions = {ArrowLeft:sessionSplit-2, ArrowRight:sessionSplit+2, Home:25, End:75};
-   if (!Object.hasOwn(positions,event.key)) return;
-   event.preventDefault();
-   setSessionSplit(positions[event.key]);
  }
 
  async function previewSession() {
@@ -261,6 +265,10 @@
   <button class:active={view==='sessions'} on:click={()=>view='sessions'}>Export sessions</button>
   {#if view==='bundles'}
    <button disabled={busy} on:click={()=>act(refreshLayouts)}>Refresh layouts</button>
+  {:else}
+   <button class="icon-btn" title="New export session" aria-label="New export session" disabled={busy||!bundles.length} on:click={()=>act(newSession)}><Icon name="new"/></button>
+   <button class="icon-btn" title="Open export session" aria-label="Open export session" disabled={busy||!sessions.length} on:click={()=>sessionPicker.showModal()}><Icon name="open"/></button>
+   <button class="icon-btn" title="Delete export session" aria-label="Delete export session" disabled={busy||!session||['running','pausing'].includes(session.status)} on:click={()=>act(deleteExportSession)}><Icon name="delete"/></button>
   {/if}
  </nav>
  {#if error}<p class="export-error" role="alert">{error}</p>{/if}
@@ -347,32 +355,14 @@
    </aside>
   </div>
  {:else if view==='sessions'}
-  <div class="export-session-grid" class:split={!!session} style:--session-left={sessionSplit+'%'}>
-   <section class="export-panel">
-    <div class="export-heading"><h2>Export sessions</h2>
-     <button class="primary" disabled={busy||!bundles.length} on:click={()=>act(newSession)}>＋ New export session</button>
-    </div>
-    {#if sessions.length}
-     <div class="export-table-scroll"><table>
-      <thead><tr><th>Export session</th><th>Export bundle</th><th>Instances</th><th>Status</th></tr></thead>
-      <tbody>
-       {#each sessions as item (item.id)}
-        <tr class:export-selected={selected===item.id}>
-         <td><button disabled={busy} aria-pressed={selected===item.id} on:click={()=>openSession(item.id)}>{item.name}</button></td>
-         <td>{item.bundle_name}</td><td>{item.completed} / {item.count}</td><td class="export-status">{item.status}</td>
-        </tr>
-       {/each}
-      </tbody>
-     </table></div>
-    {:else}<p>Create an export session to generate a dataset from a saved export bundle.</p>{/if}
-   </section>
+  <div class="export-session-grid">
    {#if session}
-    <button type="button" class="grip export-session-divider" role="separator" aria-label="Resize export session panels"
-      aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow={Math.round(sessionSplit)}
-      on:pointerdown={e=>{if(e.button===0){e.currentTarget.setPointerCapture(e.pointerId);resizing=true;}}}
-      on:pointermove={moveSessionDivider} on:lostpointercapture={()=>resizing=false} on:keydown={sessionDividerKey}></button>
     <aside class="export-panel">
-     <h2>{session.name}</h2><p>{session.bundle_name}</p>
+     <div class="export-heading"><h2>{session.name}</h2>
+      <button class="icon-btn" title="Edit export session settings" aria-label="Edit export session settings"
+       disabled={busy||['running','pausing'].includes(session.status)} on:click={()=>act(editExportSession)}><Icon name="settings"/></button>
+     </div>
+     <p>{session.bundle_name}</p>
      <progress aria-label="Export progress" value={session.completed} max={session.count}></progress>
      <p>{session.completed} of {session.count} instances · <span class="export-status">{session.status}</span></p>
      {#if session.error}<p class="export-error" role="alert">{session.error}</p>{/if}
@@ -385,13 +375,13 @@
       {/if}
       {#if !['running','pausing'].includes(session.status)}
        {#if session.status!=='draft'}<button disabled={busy} on:click={()=>act(rerunExportSession)}>Rerun export session</button>{/if}
-       <button disabled={busy} on:click={()=>act(deleteExportSession)}>Delete export session</button>
       {/if}
       <button disabled={busy||!session.completed} on:click={()=>act(()=>showOutput(session.completed))}>Open output</button>
      </div>
      <dl class="export-details">
       <dt>Seed</dt><dd>{session.seed}</dd>
-      <dt>Image format</dt><dd>{session.image_format==='jpeg' ? 'JPEG' : 'PNG'}</dd>
+      {#if session.outputs.images}<dt>Image format</dt><dd>{session.image_format==='jpeg' ? 'JPEG' : 'PNG'}</dd>{/if}
+      <dt>Files</dt><dd>{outputOptions.filter(({key})=>session.outputs[key]).map(({label})=>label).join(', ')}</dd>
       <dt>Layouts per instance</dt><dd>{session.layout_count}</dd>
       <dt>Output folder</dt><dd><code>{session.output_path}</code></dd>
      </dl>
@@ -420,13 +410,15 @@
       </div>
       {#if selectedPreview}
        <div class="export-preview-content" id="export-preview-content" role="tabpanel" aria-labelledby={'export-preview-tab-'+previewTab}>
-        {#if selectedPreview.image}
+        {#if selectedPreview.image?.src}
          <img class="export-image" src={selectedPreview.image.src} alt={selectedPreview.image.name}>
         {/if}
+        {#if selectedPreview.value != null}
         {#key previewTab}
          <Editor readOnly {dark} label={selectedPreview.image ? selectedPreview.label+' YOLO labels' : selectedPreview.label}
           language={selectedPreview.language} value={selectedPreview.value}/>
         {/key}
+        {/if}
         {#if output}
          <div class="export-actions">
           {#each selectedPreview.files as filename}
@@ -438,27 +430,50 @@
       {/if}
      {/if}
     </aside>
+   {:else}
+    <section class="export-panel"><h2>Export sessions</h2><p>Create or open an export session to get started.</p></section>
    {/if}
   </div>
  {:else}
   <p class="export-panel">Loading export bundles…</p>
  {/if}
 
+ <dialog class="action-dialog" bind:this={sessionPicker} aria-labelledby="open-export-session-title">
+  <h2 id="open-export-session-title">Open export session</h2>
+  <div class="export-list session-picker">
+   {#each sessions as item (item.id)}
+    <button class:active={selected===item.id} on:click={()=>{openSession(item.id);sessionPicker.close();}}>
+     <strong>{item.name}</strong><small>{item.bundle_name} · {item.completed}/{item.count} · {item.status}</small>
+    </button>
+   {/each}
+  </div>
+  <div class="dialog-actions"><button type="button" on:click={()=>sessionPicker.close()}>Cancel</button></div>
+ </dialog>
+
  <dialog class="action-dialog" bind:this={sessionDialog} aria-labelledby="new-session-title">
   {#if settings}
-   <form class="export-session-form" on:submit|preventDefault={()=>act(createSession)}>
-    <h2 id="new-session-title">New export session</h2>
+   <form class="export-session-form" on:submit|preventDefault={()=>act(saveExportSession)}>
+    <h2 id="new-session-title">{editingSession === null ? 'New export session' : 'Edit export session'}</h2>
     {#if error}<p class="export-error" role="alert">{error}</p>{/if}
     <label>Export session name <input bind:value={settings.name} required maxlength="160"></label>
-    <label>Export bundle <select bind:value={settings.bundle_id}>{#each bundles as bundle}<option value={bundle.id}>{bundle.name}</option>{/each}</select></label>
-    <label>Record source <select bind:value={settings.source}>{#each sources as source}<option value={source.id}>{source.name}{source.count ? ' ('+source.count+')' : ''}</option>{/each}</select></label>
-    <label>Image format <select bind:value={settings.image_format}><option value="png">PNG</option><option value="jpeg">JPEG</option></select></label>
+    <label>Export bundle <select bind:value={settings.bundle_id}>{#if !bundles.some(item=>item.id===settings.bundle_id)}<option value={settings.bundle_id}>{session.bundle_name} (saved snapshot)</option>{/if}{#each bundles as bundle}<option value={bundle.id}>{bundle.name}</option>{/each}</select></label>
+    <label>Record source <select bind:value={settings.source}>{#if !sources.some(item=>item.id===settings.source)}<option value={settings.source}>Saved record source</option>{/if}{#each sources as source}<option value={source.id}>{source.name}{source.count ? ' ('+source.count+')' : ''}</option>{/each}</select></label>
+    <fieldset class="export-output-options"><legend>Files to generate</legend>
+     {#each outputOptions as option}
+      <label><input type="checkbox" bind:checked={settings.outputs[option.key]}> {option.label}</label>
+     {/each}
+    </fieldset>
+    <label>Image format <select bind:value={settings.image_format} disabled={!settings.outputs.images}><option value="png">PNG</option><option value="jpeg">JPEG</option></select></label>
     <label>Instances <input type="number" bind:value={settings.count} required min="1" max="100000"></label>
     <label>Starting seed <input type="number" bind:value={settings.seed} required min="0" max="4294967295"></label>
     <label>Output folder name <input bind:value={settings.folder} required pattern={filenamePattern} maxlength="80"></label>
-    <p>Creating an export session saves a copy of the layouts and the record order.</p>
+    {#if editingSession === null}
+     <p>Creating an export session saves a copy of the layouts and the record order.</p>
+    {:else if session?.status !== 'draft'}
+     <p>Changing output settings prepares a new run and keeps existing files. Renaming keeps the current run.</p>
+    {/if}
     <div class="dialog-actions"><button type="button" disabled={busy} on:click={()=>sessionDialog.close()}>Cancel</button>
-     <button class="primary" disabled={busy}>Create export session</button></div>
+     <button class="primary" disabled={busy||!Object.values(settings.outputs).some(Boolean)}>{editingSession === null ? 'Create export session' : 'Save settings'}</button></div>
    </form>
   {/if}
  </dialog>
@@ -471,8 +486,7 @@
  .export-grid > .export-panel, .export-session-grid > .export-panel {overflow:auto;}
  .export-grid {grid-template-columns:minmax(165px, .75fr) minmax(420px, 2.7fr) minmax(220px, 1fr);}
  .export-session-grid {grid-template-columns:minmax(0,1fr); gap:0;}
- .export-session-grid.split {grid-template-columns:clamp(260px,var(--session-left),calc(100% - 288px)) 8px minmax(0,1fr);}
- .export-session-divider {margin:0 1px;}
+
  .export-panel {min-width:0; padding:16px; border:1px solid var(--line); border-radius:9px; background:var(--panel);}
  .export-panel h2 {margin:0 0 10px;}
  .export-list {display:grid; gap:6px; margin-top:12px;}
@@ -487,10 +501,6 @@
  .export-handle {cursor:grab;}
  .export-thumbnail {overflow:hidden; border-radius:5px; flex-shrink:0; margin-bottom:8px;}
  .export-thumbnail iframe {border:0; transform-origin:top left; pointer-events:none;}
- .export-table-scroll {overflow:auto;}
- table {border-collapse:collapse; width:100%;}
- th,td {padding:8px; border-bottom:1px solid var(--line); text-align:left;}
- .export-selected {background:var(--canvas);}
  .export-status {text-transform:capitalize;}
  progress {width:100%; accent-color:var(--accent);}
  .export-details {display:grid; grid-template-columns:auto minmax(0,1fr); gap:8px; overflow-wrap:anywhere;}
@@ -501,8 +511,14 @@
  .export-preview-content :global(.editor) {height:220px; background:var(--canvas); border:1px solid var(--line); border-radius:5px;}
  .export-error {color:var(--ink); border:1px solid #b87065; padding:8px; white-space:pre-wrap; overflow-wrap:anywhere;}
  .export-session-form {display:grid; gap:8px;}
+ .export-output-options {min-width:0; border:1px solid var(--line); border-radius:5px;}
+ .export-session-form .export-output-options label {display:flex; align-items:center; gap:7px;}
+ .export-output-options input[type=checkbox] {width:auto;}
+ .session-picker {max-height:55vh; overflow:auto;}
+ .session-picker button {display:grid; gap:4px;}
+ .action-dialog {max-height:calc(100dvh - 32px);}
  .export-image {display:block; max-width:100%; margin-top:8px; border-radius:5px;}
  .export-file {display:block; margin:6px 0; color:var(--accent);}
  @media(max-width:1100px){.export-grid {overflow:auto; grid-template-columns: minmax(140px,.7fr) minmax(350px,2fr);} .export-grid > :last-child {grid-column:1/-1;}}
- @media(max-width:720px){.exporter {height:auto; min-height:100%;} .export-grid,.export-session-grid.split {grid-template-columns:1fr; gap:12px;} .export-session-divider {display:none;} .export-layout {flex-wrap:wrap;} .export-layout-fields {min-width:180px;}}
+ @media(max-width:720px){.exporter {height:auto; min-height:100%;} .export-grid,.export-session-grid {grid-template-columns:1fr; gap:12px;} .export-layout {flex-wrap:wrap;} .export-layout-fields {min-width:180px;}}
 </style>
