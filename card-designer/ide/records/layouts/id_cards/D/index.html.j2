@@ -1,0 +1,71 @@
+<div class="card">
+  <header class="card-header">
+    <div class="title-section">
+      <h1>{{ common.get('card_title') or identity.document_type or 'IDENTITY CARD' }}</h1>
+      <h2>{{ common.get('issuer') or identity.issuing_authority or 'SPECIMEN' }}</h2>
+    </div>
+  </header>
+  <main class="identity-body">
+    <div class="photo-section">
+      <img
+        class="main-photo"
+        src="{{ assets.photo }}"
+        data-class="photo"
+        alt="Portrait"
+      />
+      <div class="card-field">
+        <span class="field-label">DATE OF BIRTH</span>
+        <p>{{ identity.birth_date or '—' }}</p>
+      </div>
+      <div class="card-field">
+        <span class="field-label">SEX</span>
+        <p>{{ identity.sex or '—' }}</p>
+      </div>
+      <div class="physical-grid field-full">
+        <div class="card-field">
+          <span class="field-label">HEIGHT</span>
+          <p>{{ identity.height or '—' }}</p>
+        </div>
+        <div class="card-field">
+          <span class="field-label">EYES</span>
+          <p>{{ identity.eye_color or '—' }}</p>
+        </div>
+        <div class="card-field">
+          <span class="field-label">BLOOD TYPE</span>
+          <p>{{ identity.blood_type or '—' }}</p>
+        </div>
+      </div>
+    </div>
+    <div class="identity-details field-grid">
+      <div class="card-field field-name field-full">
+        <span class="field-label">NAME</span>
+        <p>{{ identity.full_name or '—' }}</p>
+      </div>
+      <div class="card-field field-address field-full">
+        <span class="field-label">ADDRESS</span>
+        <p>{{ identity.address_line1 or '—' }}</p>
+        {% if identity.address_line2 %}
+        <p>{{ identity.address_line2 }}</p>
+        {% endif %}
+      </div>
+      <div class="card-field">
+        <span class="field-label">DOCUMENT NUMBER</span>
+        <p>{{ identity.document_number or '—' }}</p>
+      </div>
+      <div class="card-field">
+        <span class="field-label">NATIONALITY</span>
+        <p>{{ identity.nationality or '—' }}</p>
+      </div>
+      <div class="field-pair validity-dates field-full">
+        <div class="card-field field-issued">
+          <span class="field-label">ISSUED</span>
+          <p>{{ identity.issue_date or '—' }}</p>
+        </div>
+        <div class="card-field field-expires">
+          <span class="field-label">EXPIRES</span>
+          <p>{{ identity.expiry_date or '—' }}</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>

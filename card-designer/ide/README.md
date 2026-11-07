@@ -11,12 +11,10 @@ On macOS or Linux, from this directory:
     (cd web && npm ci && npm run build)
     .venv/bin/python -m uvicorn backend.app:app --host 127.0.0.1 --port 8765
 
-## Design and replay
-The default starter contains static example text and needs no dataset. Use **Open** (folder icon) to browse original templates A–G, each with a live preview rendered using the current seed, background and selected data. Choosing a template creates an unsaved editable draft; opening or closing the dialog preserves current edits, and replacing edited work asks for confirmation. New, Clone, Save and Delete use conventional icons with tooltips and accessible labels. Saved designs remain available through the design selector.
+## Bundles and replay
+Open the folder gallery and choose a saved bundle. Its layouts open in tabs for editing. **New bundle** creates a saved bundle with a starter layout. Use **Add layout** and **Remove layout** to change its contents, and use the Bundle and Layout inputs to rename them. **Save bundle** (Ctrl+S) saves all layouts together. **Clone bundle** copies the current edits into a separate bundle. **Delete bundle** deletes the bundle and its layouts.
 
-The original templates use a dataset-backed rendering context with seeded synthetic text/number generators. The generator supplies layout filler rather than a hidden people dataset. Connect photo and machine-readable-code datasets in **Data sources** to replace the labeled missing-image placeholders with actual records. The original portrait templates retain their native proportions; the preview, procedural backgrounds, saved designs and bulk exporter use each template's width/height. Old designs default to 640 × 400.
-
-Save the template and stylesheet together with their selected sample, seed, dimensions, background and color. Ctrl+S saves. Clone saves current edits and creates an independent copy. To return to an empty selected-person context, open **Data sources** in the right panel and choose **Clear selection**.
+The original template groups are installed as editable bundles when a database first upgrades. Existing standalone saves are imported as one-layout bundles. Connect photo and machine-readable-code datasets in **Data sources** to use actual records in the layouts.
 
 Preview randomness is request-local. The Jinja random filter and the template context generators use a fresh generator for each render; the browser background uses a separate generator initialized with the same unsigned 32-bit seed. To replay a test, hold the template, CSS, sample, assets, seed, background and color constant. Browser version and fonts can affect pixels. Randomize chooses a different background family, a new seed and a random record from the active dataset (avoiding the current record when alternatives exist). Template errors retain the last successful preview.
 
@@ -35,16 +33,69 @@ The dataset browser starts empty until real sources are connected. To browse rea
 
 The API indexes JPEG, PNG and WebP files recursively at startup. The filename stem is the display name and the relative path determines a stable record ID. Select a record in **Data sources**; its ID and photo URL appear in Context. Restart the server after adding files. Open the gear-shaped **Background settings** panel and use **Artwork** to import a separate background. SQLite and imported artwork live under data/; set CARD_DATA to relocate them.
 
+### Studio records
+
+The Git-tracked `card-designer/ide/records/` directory contains four folders:
+
+| Folder | Contents |
+| --- | --- |
+| `layouts/` | Built-in HTML, CSS and layout metadata |
+| `design-bundles/` | Built-in bundle catalog and saved `<id>/bundle.yaml` records |
+| `export-bundles/` | Saved layout pairings, one `<id>.json` per record |
+| `export-sessions/` | Session settings, frozen layouts, and progress, one `<id>.json` per session |
+
+Studio writes these files locally. Commit the records you want to carry between checkouts, including the `.next-id` counters. Keep numeric filenames, bundle folder names, and existing `layout_id` values stable so references still resolve. Saved design YAML keeps its HTML and CSS in multiline fields. Reopen a bundle in Studio after editing its file.
+
+On upgrade, Studio imports the old `CARD_DATA/bundles` YAML files or legacy SQLite design records, plus SQLite export bundles and sessions. Original records stay available for recovery. If an incoming ID already has a different record in the destination, Studio reports the conflict rather than overwriting it. `CARD_RECORDS` optionally redirects the writable records to another folder. Use a separate records folder for each concurrently running Studio instance. Set both `CARD_DATA` and `CARD_RECORDS` to temporary folders when running tests so they use isolated records.
+
+Generated files, artwork, and dataset connections stay local. A shared session resumes from the first missing local instance. If the output folder is absent, Studio recreates it. Dataset-backed sessions still require the corresponding source assets.
+
+## Card Exporter
+
+Open **Export** in the top bar. In **Export bundles**, add layouts from any saved Designer bundle, give each a unique output name such as `front` or `back`, and order the layouts. Save the pairing, then choose **New export session**. Each session stores its own layout snapshot, seed, record order and output folder. Editing the pairing or the original layouts affects future sessions.
+
+Install the Chromium renderer once before previewing or running a session. From this directory on Windows:
+
+    uv run --no-project --python 3.12 --with-requirements requirements.txt python -m playwright install chromium
+
+On macOS or Linux, run `.venv/bin/python -m playwright install chromium` with the Studio environment. Set `CARD_CHROMIUM` to use an existing Chromium binary. Studio renders independent instances in parallel with up to 32 Playwright browsers by default. Set `CARD_EXPORT_WORKERS` to a value from 1 to 32 to reduce the total number of browsers shared by export sessions and previews. Run Studio with one Uvicorn worker so session progress and pause controls share the same worker registry.
+
+Choose a record source, instance count, starting seed, output folder, and which files to generate. Card images support PNG and JPEG. Selecting YOLO generates both the per-layout labels and the session class map. **Seed only** is useful for layouts that don't require a dataset. Dataset sessions use a seeded ordering of the selected record IDs and cycle when the count exceeds the source size. All layouts in each instance use the same record and seed. Keep source assets connected and stable during the session.
+
+Use **Preview one instance** to review the actual images, YOLO labels, and expected OCR YAML. **Start** runs the job on the Studio server. **Pause** stops scheduling new renders and lets in-flight instances finish. **Resume** reuses any complete instance folders already on disk, including ones that finished out of order. After a server restart, interrupted sessions can be resumed from the Sessions view. **Open output** uses the same tabs as the preview to browse and download completed instances. **Rerun export session** starts the saved configuration over in a new output folder. **Delete export session** removes its record and keeps the generated files. Use the folder button to switch export sessions and the settings button next to the session name to edit it. Editing a previously started run prepares a draft in a new folder if you keep the same folder name. Renaming keeps the current run. The files are written beneath `CARD_DATA/exports` unless you set `CARD_EXPORT_ROOT`.
+
+Each newly rendered instance includes `expected-card-capture.json`. Compare that object to `extraction.data` from [Card Capture](https://github.com/lambdawalker/go.appexfission.aws.card-capture). It uses visible field values from the paired layouts, keeps dates and identifiers as strings, and writes empty strings for absent, clipped, or conflicting fields. Whitespace between visible words is represented by one space. Use `data-capture-field="given_names"` (or another Card Capture key) to explicitly tag a value in a layout. If a printed full name matches the source’s structured name, the export also includes its given names and surnames. Existing instance folders can still be opened or resumed; the JSON is generated for newly rendered instances.
+
+
+```text
+dataset/
+  classes.txt
+  000001/
+    front.png
+    front.txt
+    back.png
+    back.txt
+    expected-ocr.yaml
+```
+
+YOLO files contain normalized `class x_center y_center width height` rows. Class IDs are the zero-based line numbers in `classes.txt`. Clean renders include a whole-card box and boxes for annotated elements. Use literal `data-class` names on custom elements to include them in the session class map. The YAML stores the expected fields, visible text, and word boxes keyed by output name. It also reports missing dataset assets when a layout renders a placeholder.
+
 ## Render a batch
-Save a design and read its numeric ID from the status bar. With the server running, open a second terminal in this directory. On Windows:
+Save a bundle and read its numeric ID from the status bar. With the server running, open a second terminal in this directory. On Windows:
 
     uv run --no-project --python 3.12 --with playwright python -m playwright install chromium
-    uv run --no-project --python 3.12 --with playwright python bulk.py --design 1 --seed 42 --count 10 --samples 1 2 --output batch-01
+    uv run --no-project --python 3.12 --with playwright python bulk.py --bundle 1 --seed 42 --count 10 --samples 1 2 --output batch-01
 
-The first card uses seed 42, subsequent cards increment the seed, and selected records cycle in order. Omitting --samples and --seed uses the saved selections. Each completed directory contains card.png and record.json with seed, sample ID and data-class bounding boxes in card pixels. Choose a fresh output directory for a repeat run. This exporter has a separate format from the original JPEG dataset pipeline.
+The first card uses seed 42, subsequent cards increment the seed, and saved layouts cycle in order from a seed-based starting index. Omitting `--samples` uses each layout’s saved sample. Omitting `--seed` uses the first layout’s saved seed. Run the same command with `--resume` to continue an interrupted run. Resume verifies each existing PNG and record and renders missing samples. Move a damaged sample directory aside before resuming. A changed design, planned input, renderer fingerprint, or browser version requires a fresh output directory.
+
+- `manifest.json` captures the design and variants, seed and sample schedule, resolved preview hashes (including embedded font bytes), referenced photo and artwork hashes, and browser and renderer fingerprints. Keep the original source assets and browser environment available for replay. System font files are environment dependencies.
+- Each completed directory contains `card.png` and `record.json` with element boxes and OCR word annotations in native card pixels. Each word records its text, box fragments, and field label when present. Custom templates can use `data-field` to name fields explicitly.
+- `validation.json` lists render failures, missing assets, text outside the card, duplicate PNGs, and coverage by template, font, background, and split. `training.jsonl` indexes completed samples without reported issues. Train/validation assignment uses the portrait hash when available and the resolved record ID otherwise. Paths are relative to the output directory.
+
+The pilot exports clean card images. Its word labels and training index are independent of the original JPEG dataset pipeline.
 
 ## Backend boundary
-The Svelte client calls the Python service through /api. SQLite stores designs and the backend owns disk access. /docs lists the API. The same service serves the production web build for local use. The bulk command reads a saved design through HTTP and runs the same browser renderer used by the IDE.
+The Svelte client calls the Python service through /api. SQLite stores bundles and the backend owns disk access. /docs lists the API. The same service serves the production web build for local use. The bulk command reads a saved bundle through HTTP and runs the same browser renderer used by the IDE.
 
 ## Procedural backgrounds
 Choose the versioned Type A, B, C or D family in Background. The original Type B
@@ -80,7 +131,7 @@ The server starts serving the IDE immediately and warms saved dataset references
 The UI polls `/api/datasets/status` while startup indexing runs, keeps referenced tabs visible with loading indicators, and refreshes records and saved previews when ready. A selected record that is still loading returns HTTP 503; static templates remain usable. Background failures are logged and shown in the dataset panel. Restart the server to pick up files added to connected folders. Shutdown cancels queued work and does not wait indefinitely for a blocked filesystem scan.
 
 ## Template families and context
-The editor versions of `templates/id_cards/A` through `G` live under `ide/templates/id_cards/`. All seven families now use explicit layout files and dataset-backed fields. Shared HTML and bounded styling are composed with `base.css`; no gallery template uses synthetic text/date/address generators or random structural positioning. Original upstream files and older saved source remain untouched for compatibility.
+The editor versions of `templates/id_cards/A` through `G` live under `ide/records/layouts/id_cards/`. All seven families now use explicit layout files and dataset-backed fields. Shared HTML and bounded styling are composed with `base.css`; no gallery template uses synthetic text/date/address generators or random structural positioning. Original upstream files and older saved source remain untouched for compatibility.
 
 `backend/template_catalog.py` provides flat and grouped catalogs through `/api/templates` and `/api/template-bundles`. The intermediary projects the fields referenced by each template:
 
@@ -143,21 +194,15 @@ CARD_SERVER=http://127.0.0.1:8765 npm --prefix ../packages/drawing-tools run tes
 A Horizontal keeps a stable field order (name, birth/sex, address, document, personal/nationality, issue/expiry) with separate fixed-side portrait-left and portrait-right layouts. Its faint grayscale secondary portrait is an opposite-side watermark beneath all field text. The browser layout audit checks its position, opacity, stacking and reading order across seeds.
 
 ## Template bundles and bounded variations
-`templates/bundles.yaml` groups related templates. The **Horizontal identity card** bundle starts with `A-left` and `A-right`: their portrait, text and watermark regions never switch sides when the seed changes. The gallery groups templates by bundle and previews each layout. `A` remains an API alias for `A-left`; older saved template source is preserved.
+`records/design-bundles/catalog.yaml` groups related templates. The **Horizontal identity card** bundle starts with `A-left` and `A-right`: their portrait, text and watermark regions never switch sides when the seed changes. The gallery groups templates by bundle and previews each layout. `A` remains an API alias for `A-left`; older saved template source is preserved.
 
 A’s variation profile v1 permits only bounded changes: margins 24–32 px, body font 25–28 px, labels 15–17 px, field gaps 10–14 px, column gaps 28–36 px, header gaps 20–26 px, watermark opacity .08–.14, and the approved issue/expiry row ordering. The independent seeded stream does not change background or data generator random streams. Keep v1 stable; incompatible future changes require a new version.
 
-All 14 gallery layouts use eight bundled general-field faces from the ID font study. The seed and layout select a face in both the preview and exports. **Randomize card** changes the seed to sample the pool. The resolved `font_family` appears in Context and bulk export metadata. Existing saved versions retain their original typography. Reopen a gallery template to start a draft with seeded fonts. Machine-readable text keeps its fixed-width styling. The pool manifest records the tested font binaries, study entries, source links, and hashes. Each font ships with its license under `ide/fonts/`.
+The 14 A–G gallery layouts use eight bundled general-field faces from the ID font study. The seed and layout select a face in both the preview and exports. **Randomize card** changes the seed to sample the pool. The resolved `font_family` appears in Context and bulk export metadata. Existing saved versions retain their original typography. Reopen a gallery template to start a draft with seeded fonts. Machine-readable text keeps its fixed-width styling. The pool manifest records the tested font binaries, study entries, source links, and hashes. Each font ships with its license under `ide/fonts/`.
 
-Saved designs and preview context record `bundle_id`, `template_id`, `variation_version` and resolved `template_parameters`. Supplied/stale parameter values are recomputed from the selected version, template and seed. B–G are also migrated to explicit variants; the legacy gallery group has been removed. The old single-letter API IDs resolve to each family’s default variant. Existing saved source is preserved until you reopen a migrated template.
+Saved layouts and preview context record `bundle_id`, `template_id`, `variation_version` and resolved `template_parameters`. Supplied/stale parameter values are recomputed from the selected version, template and seed. B–G are also migrated to explicit variants; the legacy gallery group has been removed. The old single-letter API IDs resolve to each family’s default variant. Imported layouts retain their saved source.
 
-Bulk generation can cycle evenly through a bundle using an existing design for background, data selection and shared settings:
-
-```sh
-uv run --no-project --python 3.12 --with playwright python bulk.py --design 1 --bundle horizontal-identity --count 20 --output batch-01
-```
-
-The seed determines the starting variant; round-robin allocation keeps variant counts within one sample of each other. Each output `record.json` includes effective bundle/template IDs, seed and resolved parameters alongside the background recipe and bounding boxes. Without `--bundle`, bulk generation keeps the saved template.
+Bulk generation uses the saved bundle’s edited layouts and settings. Each record includes the saved bundle ID, layout index and name, and template provenance. Resume manifests from the standalone design exporter require the previous exporter version.
 
 ### All bundle layouts
 
@@ -174,11 +219,9 @@ The seed determines the starting variant; round-robin allocation keeps variant c
 A/B retain the v1 horizontal styling ranges. Vertical and back layouts use smaller family-specific fonts, margins and gaps, listed in each template’s `variation_schema`. Structural columns, code panels, portrait positions and barcode rotation stay fixed for every seed. Issue/expiry row order may vary within the declared profile.
 
 ### Bundle previews and editor tabs
-The gallery shows exactly one clickable card per bundle: up to three overlapping layout previews, the bundle name and its template count. Clicking the card creates one preview tab per template. Each tab keeps its own in-session HTML/CSS edits, selected data/background, saved design ID, preview and inspection output. **Save** and **Copy card image** act on the active tab. Arrow keys, Home and End navigate the preview tabs.
+The gallery shows one card per saved bundle, with up to three layout previews. Opening a bundle restores all its saved layouts. Arrow keys, Home and End navigate the tabs. Opening another bundle checks unsaved edits across all layouts, including inactive tabs.
 
-Replacing a bundle checks unsaved work in all tabs, including inactive ones. Cancel keeps the entire tab set; Discard replaces it. Save and template replacement are serialized to prevent late save results from updating a different draft. Saved designs persist individually; the open tab set is session state.
-
-The repeatable `test:bundle-tabs` browser check covers stacked previews, independent tab edits and saved IDs, aggregate unsaved protection, save/open serialization and keyboard navigation. Run it with `CARD_SERVER` against an isolated test server; it creates and removes its own saved designs.
+The `test:bundle-tabs` browser check covers opening, creating, saving multiple layouts, cloning, and deleting bundles. Run it with `CARD_SERVER` against an isolated test server.
 
 The preview toolbar downloads the active card as a PNG or every open layout as a ZIP of PNGs. Downloads render a snapshot of each tab’s current source and settings at native card dimensions, including unsaved edits, independently of preview zoom. A render failure reports an error without downloading a partial bundle.
 

@@ -1,0 +1,33 @@
+/* A: a full-height portrait and a balanced identity column. */
+.identity-details {
+  display: grid;
+  align-content: space-between;
+  gap: {{ variation.field_gap }}px;
+  position: relative;
+  isolation: isolate;
+}
+.primary-fields {
+  display: grid;
+  gap: 24px;
+}
+.identity-details > :not(.portrait-watermark-layer) {
+  position: relative;
+  z-index: 1;
+}
+.portrait-watermark-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.portrait-watermark {
+  position: absolute;
+  bottom: 0;
+  right: var(--watermark-right);
+  left: var(--watermark-left);
+  width: 132px;
+  height: 170px;
+  object-fit: cover;
+  opacity: {{ variation.watermark_opacity }};
+  filter: grayscale(100%);
+}

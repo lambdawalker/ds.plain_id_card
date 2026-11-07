@@ -22,8 +22,8 @@ class TemplateBundleTest(unittest.TestCase):
             service.open_bundle('../invalid')
 
     def test_every_gallery_template_has_fixed_layout_and_no_synthetic_fields(self):
-        self.assertEqual(len(service.list_template_bundles()),7)
-        self.assertEqual(len(service.list_templates()),14)
+        self.assertEqual(len(service.list_template_bundles()),8)
+        self.assertEqual(len(service.list_templates()),16)
         for item in service.list_templates():
             source=service.open_template(item['id'])
             self.assertTrue(source['layout'])
@@ -62,19 +62,17 @@ class TemplateBundleTest(unittest.TestCase):
     def test_saved_design_and_preview_record_resolved_parameters(self):
         source = service.open_template('A-right')
         design = service.Design(**source,seed=123,color='#ffffff',background='plain')
-        with tempfile.TemporaryDirectory() as directory, patch.object(service,'DB',Path(directory)/'design.db'):
-            with service.database() as db:
-                db.execute('CREATE TABLE design(id INTEGER PRIMARY KEY,payload TEXT NOT NULL)')
-            key=service.create(design)['id']
-            saved=service.read(key)
+        with tempfile.TemporaryDirectory() as directory, patch.object(service,'DB',Path(directory)/'design.db'), patch.object(service, "records_root", lambda: Path(directory) / "records"):
+            key=service.create_bundle(service.Bundle(name="Test bundle", layouts=[design]))['id']
+            saved=service.Design.model_validate(service.read_bundle(key)["layouts"][0])
             self.assertEqual(saved.bundle_id,'horizontal-identity')
             self.assertEqual(saved.template_parameters,resolve_parameters('A-right',123, source['variation_version']))
             payload=json.loads(saved.model_dump_json())
             payload['seed']=124
             payload['template_parameters']['margin']=999
             saved=service.Design(**payload)
-            service.update(key,saved)
-            saved=service.read(key)
+            service.update_bundle(key, service.Bundle(name="Test bundle", layouts=[saved]))
+            saved=service.Design.model_validate(service.read_bundle(key)["layouts"][0])
             self.assertEqual(saved.template_parameters,resolve_parameters('A-right',124, source['variation_version']))
             preview=service.preview(service.Preview(design=saved))
             self.assertEqual(preview['context']['template_selection']['parameters'],saved.template_parameters)
@@ -97,6 +95,10 @@ class TemplateBundleTest(unittest.TestCase):
         for key in TEMPLATE_IDS:
             with self.subTest(template=key):
                 source = service.open_template(key)
+                if source['variation_version'] == 2:
+                    design = service.Design(**source, seed=42, color='#ffffff', background='plain')
+                    self.assertNotIn('@font-face', service.preview(service.Preview(design=design))['css'])
+                    continue
                 designs = [service.Design(**source, seed=seed, color='#ffffff', background='plain')
                            for seed in range(8)]
                 previews = [service.preview(service.Preview(design=design)) for design in designs]

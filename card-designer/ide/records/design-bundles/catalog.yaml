@@ -1,0 +1,123 @@
+bundles:
+- id: horizontal-identity
+  name: Horizontal identity card
+  description: Fixed portrait placement with seeded typefaces, typography and spacing.
+  templates:
+  - id: A-left
+    name: Portrait left
+    folder: A
+    layout: portrait-left
+    variation_version: 3
+  - id: A-right
+    name: Portrait right
+    folder: A
+    layout: portrait-right
+    variation_version: 3
+- id: horizontal-details
+  name: Horizontal identity · detailed
+  description: Fixed structural layouts with dataset-backed fields and bounded seeded
+    styling.
+  templates:
+  - id: B-left
+    name: Portrait left
+    folder: B
+    layout: portrait-left
+    variation_version: 3
+  - id: B-right
+    name: Portrait right
+    folder: B
+    layout: portrait-right
+    variation_version: 3
+- id: vertical-stack
+  name: Vertical identity · stacked
+  description: Fixed structural layouts with dataset-backed fields and bounded seeded
+    styling.
+  templates:
+  - id: C-top
+    name: Portrait above fields
+    folder: C
+    layout: portrait-top
+    variation_version: 3
+  - id: C-bottom
+    name: Portrait below fields
+    folder: C
+    layout: portrait-bottom
+    variation_version: 3
+- id: vertical-columns
+  name: Vertical identity · columns
+  description: Fixed structural layouts with dataset-backed fields and bounded seeded
+    styling.
+  templates:
+  - id: D-left
+    name: Portrait column left
+    folder: D
+    layout: portrait-left
+    variation_version: 3
+  - id: D-right
+    name: Portrait column right
+    folder: D
+    layout: portrait-right
+    variation_version: 3
+- id: document-back
+  name: Document back · code panel
+  description: Fixed structural layouts with dataset-backed fields and bounded seeded
+    styling.
+  templates:
+  - id: E-codes-top
+    name: Codes above details
+    folder: E
+    layout: codes-top
+    variation_version: 3
+  - id: E-codes-bottom
+    name: Codes below details
+    folder: E
+    layout: codes-bottom
+    variation_version: 3
+- id: document-back-rail
+  name: Document back · barcode rail
+  description: Fixed structural layouts with dataset-backed fields and bounded seeded
+    styling.
+  templates:
+  - id: F-rail-left
+    name: Barcode rail left
+    folder: F
+    layout: rail-left
+    variation_version: 3
+  - id: F-rail-right
+    name: Barcode rail right
+    folder: F
+    layout: rail-right
+    variation_version: 3
+- id: document-back-photo
+  name: Document back · portrait
+  description: Fixed structural layouts with dataset-backed fields and bounded seeded
+    styling.
+  templates:
+  - id: G-photo-left
+    name: Portrait left
+    folder: G
+    layout: portrait-left
+    variation_version: 3
+  - id: G-photo-right
+    name: Portrait right
+    folder: G
+    layout: portrait-right
+    variation_version: 3
+- id: georgia-a
+  name: Georgia A
+  description: Paired Georgia-inspired front and back specimens.
+  defaults:
+    color: "#e2eddb"
+    background: plain
+    auto_theme: false
+  templates:
+  - id: GA-front
+    name: Georgia A · Front
+    folder: GeorgiaA-front
+    layout: front
+    variation_version: 2
+  - id: GA-back
+    name: Georgia A · Back
+    folder: GeorgiaA-back
+    layout: back
+    variation_version: 2

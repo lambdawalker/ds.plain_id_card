@@ -5,11 +5,11 @@ import yaml
 from .template_context import ASSET_SOURCES
 from .template_variations import variation_schema
 
-ROOT = Path(__file__).resolve().parents[1] / 'templates' / 'id_cards'
+ROOT = Path(__file__).resolve().parents[1] / 'records' / 'layouts' / 'id_cards'
 
 
 def bundle_registry():
-    return yaml.safe_load((ROOT.parent / 'bundles.yaml').read_text(encoding='utf-8'))['bundles']
+    return yaml.safe_load((ROOT.parents[1] / 'design-bundles' / 'catalog.yaml').read_text(encoding='utf-8'))['bundles']
 
 
 def template_source(key):
@@ -22,7 +22,8 @@ def template_source(key):
     info = yaml.safe_load((folder / 'meta.yaml').read_text(encoding='utf-8'))
     kind = info.get('class', 'horizontal_card')
     width, height = (850, 1350) if kind == 'vertical_card' else (1350, 850)
-    template = (folder / 'index.html.j2').read_text(encoding='utf-8')
+    markup = ROOT / 'portrait-identity.html.j2' if folder.name in ('B', 'C') else folder / 'index.html.j2'
+    template = markup.read_text(encoding='utf-8')
     css = (ROOT / 'base.css').read_text(encoding='utf-8') + '\n' + (folder / 'style.css.j2').read_text(encoding='utf-8')
     if variant.get('layout'):
         css += '\n' + (folder / (variant['layout'] + '.css')).read_text(encoding='utf-8')

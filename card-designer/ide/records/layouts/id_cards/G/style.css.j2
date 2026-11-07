@@ -1,0 +1,32 @@
+.identity-details {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.identity-details > .field-grid {
+  flex: 1;
+  align-content: space-between;
+}
+.verification {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.verification .qrcode {
+  width: 100px;
+  height: 100px;
+  flex-shrink: 0;
+}
+.mrz-text {
+  font: 18px/1.2 monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  margin: 0;
+}
+.footer-barcode {
+  width: 750px;
+  height: 55px;
+  align-self: center;
+  flex-shrink: 0;
+}

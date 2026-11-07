@@ -1,7 +1,7 @@
 """Static example layout used by the IDE's Open template A action."""
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1] / "templates"
+ROOT = Path(__file__).resolve().parents[1] / "records" / "layouts"
 
 
 def sample_template():

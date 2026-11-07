@@ -1,216 +1,86 @@
-import { chromium } from "playwright";
-import assert from "node:assert/strict";
-const browser = await chromium.launch({
-  executablePath: process.env.CARD_CHROMIUM || undefined,
-  headless: true,
-  args: ["--no-sandbox"],
-});
-const page = await browser.newPage({ viewport: { width: 1600, height: 1050 } });
-page.setDefaultTimeout(15000);
-const base = process.env.CARD_SERVER || "http://127.0.0.1:8765",
-  errors = [],
-  createdIds = new Set();
-page.on("pageerror", (e) => errors.push(e.message));
+import assert from 'node:assert/strict';
+import { chromium } from 'playwright';
+
+const base = process.env.CARD_SERVER || 'http://127.0.0.1:8879';
+const browser = await chromium.launch({executablePath: process.env.CARD_CHROMIUM || undefined});
+const page = await browser.newPage({viewport: {width: 1600, height: 1050}});
+const created = new Set();
+const button = name => page.getByRole('button', {name, exact: true});
+const editor = page.getByRole('textbox', {name: 'Template source', exact: true});
+const tabs = page.getByRole('tablist', {name: 'Card layouts'});
+
+async function open(name, discard = false) {
+  await button('Open bundles').click();
+  await button('Open bundle ' + name).click();
+  if (discard) await button('Discard changes').click();
+  await page.getByRole('dialog', {name: 'Open a bundle'}).waitFor({state: 'hidden'});
+}
+
+async function savedBy(name, method, path) {
+  const pending = page.waitForResponse(r => new URL(r.url()).pathname === path && r.request().method() === method);
+  await button(name).click();
+  const response = await pending;
+  assert.ok(response.ok(), await response.text());
+  return response.json();
+}
+
 try {
-  const start = await (
-    await page.request.post(base + "/api/designs", {
-      data: {
-        name: "Tabs baseline",
-        template: "<p>Baseline</p>",
-        css: "",
-        seed: 42,
-        color: "#aabbcc",
-        background: "plain",
-        sample: "",
-      },
-    })
-  ).json();
-  createdIds.add(start.id);
   await page.goto(base);
-  await page
-    .getByLabel("Open design", { exact: true })
-    .selectOption(String(start.id));
-  await page
-    .getByRole("button", { name: "Open templates", exact: true })
-    .click();
-  const gallery = page.getByRole("dialog", {
-      name: "Open a bundle",
-      exact: true,
-    }),
-    stack = gallery.getByRole("button", {
-      name: "Open bundle Horizontal identity card",
-      exact: true,
-    });
-  await gallery.locator(".bundle-choice").nth(6).waitFor();
-  assert.equal(await gallery.locator(".bundle-choice").count(), 7);
-  assert.equal(await gallery.locator(".template-card,.open-bundle").count(), 0);
-  await stack.locator("iframe").nth(1).waitFor();
-  const cards = await stack.locator(".stack-card").all();
-  assert.equal(cards.length, 2);
-  const a = await cards[0].boundingBox(),
-    b = await cards[1].boundingBox();
-  assert.ok(a.x + a.width > b.x);
-  assert.ok(Math.abs(a.x - b.x) > 5);
-  if(process.env.GALLERY_SCREENSHOT)await page.screenshot({path:process.env.GALLERY_SCREENSHOT});
-  await stack.click();
-  await gallery.waitFor({ state: "hidden" });
-  const tabs = page.getByRole("tablist", { name: "Card layouts", exact: true });
-  assert.equal(await tabs.getByRole("tab").count(), 2);
-  const editor = page.getByRole("textbox", {
-    name: "Template source",
-    exact: true,
-  });
-  const frame = page.frameLocator('iframe[title="Card preview"]');
-  async function editName(marker) {
-    const source = await editor.innerText();
-    await editor.fill(
-      source.replace(
-        />(?:NAME|LEFT DRAFT NAME|RIGHT DRAFT NAME|RIGHT DRAFT UPDATED)</,
-        ">" + marker + "<",
-      ),
-    );
-    await frame.getByText(marker, { exact: true }).waitFor();
-  }
-  await editName("LEFT DRAFT NAME");
-  await tabs.getByRole("tab", { name: "Portrait right", exact: true }).click();
-  assert.ok(!(await editor.innerText()).includes("LEFT DRAFT NAME"));
-  await editName("RIGHT DRAFT NAME");
-  await tabs.getByRole("tab", { name: "Portrait left", exact: true }).click();
-  assert.ok((await editor.innerText()).includes("LEFT DRAFT NAME"));
-  await page.getByRole("button", { name: "Save design", exact: true }).click();
-  await page.waitForFunction(
-    () =>
-      document.querySelector('select[aria-label="Open design"]').value !== "",
-  );
-  const leftId = await page
-    .getByLabel("Open design", { exact: true })
-    .inputValue();
-  createdIds.add(leftId);
-  await tabs.getByRole("tab", { name: "Portrait right", exact: true }).click();
-  assert.equal(
-    await page.getByLabel("Open design", { exact: true }).inputValue(),
-    "",
-  );
-  assert.ok((await editor.innerText()).includes("RIGHT DRAFT NAME"));
-  await page.getByRole("button", { name: "Save design", exact: true }).click();
-  await page.waitForFunction(
-    () =>
-      document.querySelector('select[aria-label="Open design"]').value !== "",
-  );
-  const rightId = await page
-    .getByLabel("Open design", { exact: true })
-    .inputValue();
-  createdIds.add(rightId);
-  assert.notEqual(leftId, rightId);
-  await editName("RIGHT DRAFT UPDATED");
-  await tabs.getByRole("tab", { name: "Portrait left", exact: true }).click();
-  assert.equal(
-    await page.getByLabel("Open design", { exact: true }).inputValue(),
-    leftId,
-  );
-  await page
-    .getByRole("button", { name: "Open templates", exact: true })
-    .click();
-  await gallery
-    .getByRole("button", {
-      name: "Open bundle Vertical identity · stacked",
-      exact: true,
-    })
-    .click();
-  const discard = page.getByRole("dialog", {
-    name: "Unsaved changes",
-    exact: true,
-  });
-  await discard.waitFor();
-  await discard
-    .getByRole("button", { name: "Keep editing", exact: true })
-    .click();
-  assert.equal(await tabs.getByRole("tab").count(), 2);
-  await gallery
-    .getByRole("button", {
-      name: "Open bundle Vertical identity · stacked",
-      exact: true,
-    })
-    .click();
-  await discard
-    .getByRole("button", { name: "Discard changes", exact: true })
-    .click();
-  await gallery.waitFor({ state: "hidden" });
-  await tabs
-    .getByRole("tab", { name: "Portrait above fields", exact: true })
-    .waitFor();
-  await tabs
-    .getByRole("tab", { name: "Portrait below fields", exact: true })
-    .click();
-  assert.equal(
-    await frame
-      .locator("#view-port")
-      .evaluate((el) => Math.round(el.getBoundingClientRect().width)),
-    850,
-  );
-  // A save in progress must block replacement of the tab set.
-  await page
-    .getByRole("button", { name: "Open templates", exact: true })
-    .click();
-  let release, started;
-  const gate = new Promise((r) => (release = r)),
-    seen = new Promise((r) => (started = r));
-  await page.route("**/api/designs", async (route) => {
-    if (route.request().method() === "POST") {
-      started();
-      await gate;
-    }
-    await route.continue();
-  });
-  await page.keyboard.press("Control+s");
-  await seen;
-  assert.equal(
-    await gallery
-      .getByRole("button", {
-        name: "Open bundle Horizontal identity card",
-        exact: true,
-      })
-      .isDisabled(),
-    true,
-  );
-  release();
-  await page.waitForFunction(
-    () =>
-      document.querySelector('select[aria-label="Open design"]').value !== "",
-  );
-  createdIds.add(
-    await page.getByLabel("Open design", { exact: true }).inputValue(),
-  );
-  await page.unroute("**/api/designs");
-  await gallery
-    .getByRole("button", { name: "Close templates", exact: true })
-    .click();
-  await page.setViewportSize({ width: 390, height: 800 });
-  await tabs.scrollIntoViewIfNeeded();
-  await tabs.getByRole("tab").first().focus();
-  await page.keyboard.press("ArrowRight");
-  assert.equal(
-    await tabs.getByRole("tab").last().getAttribute("aria-selected"),
-    "true",
-  );
-  await page
-    .getByRole("button", { name: "Open templates", exact: true })
-    .click();
-  const mobileCard = gallery.locator(".bundle-choice").first();
-  await mobileCard.waitFor();
-  const bounds = await mobileCard.boundingBox();
-  assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390);
-  assert.equal(await gallery.locator(".bundle-choice").count(), 7);
-  assert.ok(
-    await gallery.evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
-  );
-  if(process.env.GALLERY_SCREENSHOT)await page.screenshot({path:process.env.GALLERY_SCREENSHOT+'.mobile.png'});
-  assert.deepEqual(errors, []);
-  console.log(
-    "PASS: stacked overlapping bundle previews, opening all layouts as tabs, independent source edits/save IDs, aggregate unsaved protection, portrait tab dimensions, serialized Save/bundle actions, mobile keyboard tabs.",
-  );
+  const bundle = (await (await page.request.get(base + '/api/bundles')).json())
+    .find(item => item.name === 'Horizontal identity card');
+  assert.ok(bundle);
+  assert.equal((await page.request.get(base + '/api/designs')).status(), 404);
+  await open(bundle.name);
+  assert.equal(await tabs.getByRole('tab').count(), 2);
+
+  await button('New bundle').click();
+  const create = page.getByRole('dialog', {name: 'New bundle'});
+  await create.getByLabel('Bundle name').fill('Bundle CRUD test');
+  const pending = page.waitForResponse(r => new URL(r.url()).pathname === '/api/bundles' && r.request().method() === 'POST');
+  await create.getByRole('button', {name: 'Create bundle'}).click();
+  const original = await (await pending).json();
+  created.add(original.id);
+  await editor.fill('<p>First saved layout</p>');
+  await button('Add layout').click();
+  await editor.fill('<p>Second saved layout</p>');
+  await page.getByLabel('Bundle', {exact: true}).fill('Renamed test bundle');
+  await tabs.getByRole('tab').nth(1).press('Home');
+  assert.equal(await editor.innerText(), '<p>First saved layout</p>');
+  await tabs.getByRole('tab').nth(0).press('End');
+  assert.equal(await editor.innerText(), '<p>Second saved layout</p>');
+  await button('Open bundles').click();
+  await button('Open bundle ' + bundle.name).click();
+  await button('Keep editing').click();
+  await button('Close bundles').click();
+  assert.equal(await editor.innerText(), '<p>Second saved layout</p>');
+  const updated = await savedBy('Save bundle', 'PUT', '/api/bundles/' + original.id);
+  assert.equal(updated.id, original.id);
+  assert.deepEqual(updated.layouts.map(layout => layout.template), [
+    '<p>First saved layout</p>', '<p>Second saved layout</p>'
+  ]);
+
+  await editor.fill('<p>Unsaved clone edit</p>');
+  const copy = await savedBy('Clone bundle', 'POST', '/api/bundles/' + original.id + '/clone');
+  created.add(copy.id);
+  assert.equal(copy.layouts[1].template, '<p>Unsaved clone edit</p>');
+  assert.notEqual(copy.id, original.id);
+
+  await open('Renamed test bundle');
+  await tabs.getByRole('tab').nth(1).click();
+  assert.equal(await editor.innerText(), '<p>Second saved layout</p>');
+  await button('Remove layout').click();
+  await page.getByRole('dialog', {name: 'Remove layout'}).getByRole('button', {name: 'Remove layout'}).click();
+  const reduced = await savedBy('Save bundle', 'PUT', '/api/bundles/' + original.id);
+  assert.equal(reduced.layouts.length, 1);
+
+  await open(copy.name);
+  await button('Delete bundle').click();
+  await page.getByRole('dialog', {name: 'Delete bundle'}).getByRole('button', {name: 'Delete bundle'}).click();
+  await page.waitForFunction(name => document.querySelector('.toolbar input')?.value !== name, copy.name);
+  assert.equal((await page.request.get(base + '/api/bundles/' + copy.id)).status(), 404);
+  assert.ok((await page.request.get(base + '/api/bundles/' + original.id)).ok());
+  console.log('PASS: bundle gallery, creation, multi-layout save, independent clone, removal and deletion');
 } finally {
+  for (const id of created) await page.request.delete(base + '/api/bundles/' + id);
   await browser.close();
-  for (const id of createdIds)
-    await fetch(base + "/api/designs/" + id, { method: "DELETE" });
 }

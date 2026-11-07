@@ -11,7 +11,7 @@ class TemplateCatalogTest(unittest.TestCase):
         for item in items:
             self.assertGreater(item['height'], item['width']) if item['kind']=='vertical_card' else self.assertGreater(item['width'], item['height'])
             self.assertEqual(sorted((item['width'],item['height'])),[850,1350])
-            self.assertEqual(item['variation_version'], 3)
+            self.assertEqual(item['variation_version'], 2 if item['id'].startswith('GA-') else 3)
             source = service.open_template(item['id'])
             self.assertNotIn('/ds/', source['template'])
             self.assertIn('assets.', source['template'])
@@ -47,10 +47,8 @@ class TemplateCatalogTest(unittest.TestCase):
         from pathlib import Path
         import tempfile
         from unittest.mock import patch
-        with tempfile.TemporaryDirectory() as tmp, patch.object(service, 'DB', Path(tmp) / 'design.db'):
-            with service.database() as db:
-                db.execute('CREATE TABLE design(id INTEGER PRIMARY KEY, payload TEXT NOT NULL)')
+        with tempfile.TemporaryDirectory() as tmp, patch.object(service, 'DB', Path(tmp) / 'design.db'), patch.object(service, "records_root", lambda: Path(tmp) / "records"):
             design = service.Design(**service.open_template('C'), seed=42, color='#a4d5c8', background='plain')
-            key = service.create(design)['id']
-            saved = service.read(key)
+            key = service.create_bundle(service.Bundle(name="Test bundle", layouts=[design]))['id']
+            saved = service.Design.model_validate(service.read_bundle(key)["layouts"][0])
             self.assertEqual((saved.width, saved.height, saved.template_id), (850, 1350, 'C-top'))

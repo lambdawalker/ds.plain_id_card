@@ -1,14 +1,18 @@
 import os
 import asyncio
 import logging
+import json
 from hashlib import sha256
 import random
 import sqlite3
 import secrets
-from contextlib import closing, asynccontextmanager, contextmanager
+from uuid import uuid4
+from contextlib import closing, asynccontextmanager, contextmanager, suppress
 from concurrent.futures import Future, TimeoutError as FutureTimeout
 from queue import Queue, Empty
 from pathlib import Path
+
+import yaml
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
@@ -19,6 +23,8 @@ from fastapi.staticfiles import StaticFiles
 from jinja2 import StrictUndefined, TemplateError
 from jinja2.sandbox import SandboxedEnvironment
 from .path_resolver import resolve
+from .exporter import Exporter
+from .record_files import atomic_write, counter_value, legacy_sequence
 from threading import RLock, Thread, Event
 from .photo_dataset import metadata, photo_index
 from .legacy import sample_template
@@ -35,6 +41,7 @@ DB = DATA / "designs.sqlite"
 @asynccontextmanager
 async def lifespan(app):
     global dataset_loading, dataset_load_error, active_loader_stop, catalog
+    exporter.initialize()
     stop = Event()
     active_loader_stop = stop
     dataset_loading, dataset_load_error = True, ""
@@ -80,6 +87,7 @@ class Design(BaseModel):
     height: int = Field(default=400, ge=160, le=4096)
     auto_theme: bool = False
     text_color: str = Field(default="#000000", pattern=r"^#[0-9a-fA-F]{6}$")
+    layout_id: str | None = Field(default=None, max_length=64)
     template_id: str | None = None
     bundle_id: str | None = None
     variation_version: int = 1
@@ -107,63 +115,271 @@ def database():
     return db
 
 
-with closing(database()) as db, db:
-    db.execute("CREATE TABLE IF NOT EXISTS design(id INTEGER PRIMARY KEY, payload TEXT NOT NULL)")
+class Bundle(BaseModel):
+    name: str = Field(min_length=1, max_length=160, pattern=r"\S")
+    layouts: list[Design] = Field(min_length=1)
 
 
-def load(db, key):
-    row = db.execute("SELECT payload FROM design WHERE id=?", (key,)).fetchone()
-    if not row:
-        raise HTTPException(404, "Design was deleted")
-    return prepare_design(Design.model_validate_json(row[0]))
+def insert_bundle(db, bundle):
+    return db.execute("INSERT INTO bundle(payload) VALUES (?)", (bundle.model_dump_json(),)).lastrowid
 
 
-def insert(db, design):
-    design = prepare_design(design)
-    return db.execute("INSERT INTO design(payload) VALUES (?)", (design.model_dump_json(),)).lastrowid
+def initialize_bundles(db):
+    tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "bundle" in tables:
+        return
+    db.execute("CREATE TABLE bundle(id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL)")
+    if "design" in tables:
+        for row in db.execute("SELECT payload FROM design ORDER BY id"):
+            layout = Design.model_validate_json(row[0])
+            insert_bundle(db, Bundle(name=layout.name if layout.name.strip() else "Imported bundle", layouts=[layout]))
+    for bundle in template_bundles():
+        insert_bundle(db, stock_bundle(bundle))
 
 
-@app.get("/api/designs")
-def designs():
-    with closing(database()) as db:
-        return [dict(id=row[0], name=row[1]) for row in db.execute(
-            "SELECT id, json_extract(payload,'$.name') FROM design ORDER BY id")]
+def stock_bundle(bundle):
+    defaults = {"seed": 42, "color": "#a4d5c8", "background": "type-b", "auto_theme": True,
+                **bundle.get("defaults", {})}
+    layouts = [Design(**template_source(item["id"]), **defaults) for item in bundle["templates"]]
+    saved = Bundle(name=bundle["name"], layouts=layouts)
+    for layout in saved.layouts:
+        layout.layout_id = f"stock-{layout.template_id}"
+    return saved
 
 
-@app.get("/api/designs/{key}")
-def read(key: int):
-    with closing(database()) as db:
-        return load(db, key)
+def upgrade_stock_layouts(db):
+    """Replace known stock sources once, leaving user-edited source pairs alone."""
+    if db.execute("PRAGMA user_version").fetchone()[0] >= 1:
+        return
+    fingerprints = json.loads(Path(__file__).with_name("stock_layout_v1.json").read_text(encoding="utf-8"))
+    sources = {}
+    for key, payload in db.execute("SELECT id, payload FROM bundle").fetchall():
+        bundle = Bundle.model_validate_json(payload)
+        changed = False
+        for layout in bundle.layouts:
+            expected = fingerprints.get(layout.template_id)
+            if expected is None:
+                continue
+            actual = [sha256(getattr(layout, field).encode()).hexdigest() for field in ("template", "css")]
+            if actual != expected:
+                continue
+            if layout.template_id not in sources:
+                sources[layout.template_id] = template_source(layout.template_id)
+            source = sources[layout.template_id]
+            layout.template, layout.css = source["template"], source["css"]
+            changed = True
+        if changed:
+            db.execute("UPDATE bundle SET payload=? WHERE id=?", (bundle.model_dump_json(), key))
+    db.execute("PRAGMA user_version = 1")
 
 
-@app.post("/api/designs")
-def create(design: Design):
+def assign_layout_ids(bundle, legacy_key=None):
+    seen = set()
+    for index, layout in enumerate(bundle.layouts):
+        if not layout.layout_id or layout.layout_id in seen:
+            layout.layout_id = uuid4().hex if legacy_key is None else f"legacy-{legacy_key}-{index}"
+        seen.add(layout.layout_id)
+
+
+def upgrade_legacy_bundles(db):
+    initialize_bundles(db)
+    upgrade_stock_layouts(db)
+    if db.execute("PRAGMA user_version").fetchone()[0] < 2:
+        for key, payload in db.execute("SELECT id,payload FROM bundle").fetchall():
+            bundle = Bundle.model_validate_json(payload)
+            assign_layout_ids(bundle, legacy_key=key)
+            db.execute("UPDATE bundle SET payload=? WHERE id=?", (bundle.model_dump_json(), key))
+        db.execute("PRAGMA user_version=2")
+    if db.execute("PRAGMA user_version").fetchone()[0] < 3:
+        installed = db.execute(
+            "SELECT 1 FROM bundle, json_each(bundle.payload, '$.layouts') AS layout "
+            "WHERE json_extract(layout.value, '$.template_id') = 'GA-front' LIMIT 1"
+        ).fetchone()
+        if installed is None:
+            insert_bundle(db, stock_bundle(next(item for item in template_bundles() if item["id"] == "georgia-a")))
+        db.execute("PRAGMA user_version=3")
+
+
+class BundleDumper(yaml.SafeDumper):
+    pass
+
+
+BundleDumper.add_representer(
+    str, lambda dumper, value: dumper.represent_scalar(
+        "tag:yaml.org,2002:str", value, style="|" if "\n" in value else None
+    )
+)
+
+
+def records_root():
+    return Path(os.getenv("CARD_RECORDS", ROOT / "records"))
+
+
+def bundle_root():
+    root = records_root() / "design-bundles"
+    if root.is_symlink():
+        raise RuntimeError(f"Bundle storage must be a directory: {root}")
+    return root
+
+
+def bundle_file(key):
+    folder = bundle_root() / str(key)
+    path = folder / "bundle.yaml"
+    if key <= 0 or folder.is_symlink() or path.is_symlink():
+        raise HTTPException(404, "Bundle was deleted")
+    return path
+
+
+def write_bundle(key, bundle):
+    atomic_write(bundle_file(key), yaml.dump(bundle.model_dump(mode="json"), Dumper=BundleDumper,
+                                            allow_unicode=True, sort_keys=False, width=120))
+
+
+def bundle_keys(root=None):
+    root = bundle_root() if root is None else root
+    names = (path.parent.name for path in root.glob("*/bundle.yaml")
+             if not path.parent.is_symlink() and not path.is_symlink() and path.is_file())
+    return sorted(int(name) for name in names if name.isascii() and name.isdecimal() and name[0] != "0")
+
+
+def initialize_bundle_storage():
     with closing(database()) as db, db:
-        return {"id": insert(db, design), "template_parameters": design.template_parameters, "bundle_id": design.bundle_id}
+        db.execute("BEGIN IMMEDIATE")
+        version = db.execute("PRAGMA user_version").fetchone()[0]
+        counter = bundle_root() / ".next-id"
+        if version >= 5 and (counter.exists() or bundle_keys()):
+            return
+        previous = DB.parent / "bundles"
+        tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        sequence = 0
+        if version == 4:
+            records = [(key, read_bundle_file(previous / str(key) / "bundle.yaml"))
+                       for key in bundle_keys(previous)]
+            sequence = counter_value(previous) - 1
+        elif version < 4 and tables.intersection({"bundle", "design"}):
+            upgrade_legacy_bundles(db)
+            records = [(key, Bundle.model_validate_json(payload))
+                       for key, payload in db.execute("SELECT id,payload FROM bundle ORDER BY id")]
+            sequence = legacy_sequence(db, "bundle")
+        elif counter.exists() or bundle_keys():
+            records = []
+        else:
+            records = [(key, stock_bundle(item)) for key, item in enumerate(template_bundles(), 1)]
+        for key, bundle in records:
+            if not bundle_file(key).exists():
+                write_bundle(key, bundle)
+            elif load_bundle(key) != bundle:
+                raise RuntimeError(f"Design bundle {key} differs between legacy storage and {bundle_file(key)}")
+        next_id = max(next_bundle_id(), sequence + 1)
+        atomic_write(counter, f"{next_id}\n")
+        if version < 5:
+            db.execute("PRAGMA user_version=5")
 
 
-@app.put("/api/designs/{key}")
-def update(key: int, design: Design):
-    design = prepare_design(design)
+def next_bundle_id():
+    return max(counter_value(bundle_root()), max(bundle_keys(), default=0) + 1)
+
+
+def add_bundle(bundle):
+    key = next_bundle_id()
+    atomic_write(bundle_root() / ".next-id", f"{key + 1}\n")
+    write_bundle(key, bundle)
+    return key
+
+
+def read_bundle_file(path):
+    try:
+        bundle = Bundle.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
+        ids = {layout.layout_id for layout in bundle.layouts}
+        if ids.intersection({None, ""}) or len(ids) != len(bundle.layouts):
+            raise ValueError("Each layout must have a unique, non-empty layout_id")
+        # Match the JSON API types for YAML scalars such as unquoted dates.
+        return Bundle.model_validate_json(bundle.model_dump_json())
+    except FileNotFoundError as exc:
+        raise HTTPException(404, "Bundle was deleted") from exc
+    except (yaml.YAMLError, ValueError, OSError) as exc:
+        logger.warning("Invalid bundle file %s: %s", path, exc)
+        raise HTTPException(422, f"Invalid bundle file: {path}") from exc
+
+
+def load_bundle(key):
+    return read_bundle_file(bundle_file(key))
+
+
+initialize_bundle_storage()
+
+
+def bundle_response(key, bundle):
+    return {"id": key, **bundle.model_dump()}
+
+
+def prepare_bundle(bundle):
+    bundle.layouts = [layout.model_copy() for layout in bundle.layouts]
+    assign_layout_ids(bundle)
+    bundle.layouts = [prepare_design(layout) for layout in bundle.layouts]
+    return bundle
+
+
+@app.get("/api/bundles")
+def list_bundles():
+    items = []
+    for key in bundle_keys():
+        try:
+            bundle = load_bundle(key)
+        except HTTPException as exc:
+            if exc.status_code == 422:
+                items.append(dict(id=key, name=f"Invalid bundle ({key})", layout_count=0))
+            continue
+        items.append(dict(id=key, name=bundle.name, layout_count=len(bundle.layouts)))
+    return items
+
+
+@app.get("/api/bundles/{key}")
+def read_bundle(key: int):
+    return bundle_response(key, prepare_bundle(load_bundle(key)))
+
+
+@app.post("/api/bundles")
+def create_bundle(bundle: Bundle):
+    bundle = prepare_bundle(bundle)
     with closing(database()) as db, db:
-        load(db, key)
-        db.execute("UPDATE design SET payload=? WHERE id=?", (design.model_dump_json(), key))
-    return {"id": key, "template_parameters": design.template_parameters, "bundle_id": design.bundle_id}
+        # Serialize file writes across Studio processes using the existing database lock.
+        db.execute("BEGIN IMMEDIATE")
+        return bundle_response(add_bundle(bundle), bundle)
 
 
-@app.post("/api/designs/{key}/clone")
-def clone(key: int):
+@app.put("/api/bundles/{key}")
+def update_bundle(key: int, bundle: Bundle):
+    bundle = prepare_bundle(bundle)
     with closing(database()) as db, db:
-        design = load(db, key)
-        design.name = design.name[:155] + " copy"
-        return {"id": insert(db, design), "template_parameters": design.template_parameters, "bundle_id": design.bundle_id}
+        db.execute("BEGIN IMMEDIATE")
+        if not bundle_file(key).is_file():
+            raise HTTPException(404, "Bundle was deleted")
+        write_bundle(key, bundle)
+    return bundle_response(key, bundle)
 
 
-@app.delete("/api/designs/{key}")
-def delete(key: int):
+@app.post("/api/bundles/{key}/clone")
+def clone_bundle(key: int, draft: Bundle | None = None):
     with closing(database()) as db, db:
-        load(db, key)
-        db.execute("DELETE FROM design WHERE id=?", (key,))
+        db.execute("BEGIN IMMEDIATE")
+        original = load_bundle(key)
+        copy = prepare_bundle((draft if draft is not None else original).model_copy(deep=True))
+        copy.name = copy.name[:155] + " copy"
+        return bundle_response(add_bundle(copy), copy)
+
+
+@app.delete("/api/bundles/{key}")
+def delete_bundle(key: int):
+    with closing(database()) as db, db:
+        db.execute("BEGIN IMMEDIATE")
+        path = bundle_file(key)
+        try:
+            path.unlink()
+        except FileNotFoundError as exc:
+            raise HTTPException(404, "Bundle was deleted") from exc
+        with suppress(OSError):
+            path.parent.rmdir()
     return {"deleted": key}
 
 
@@ -527,7 +743,7 @@ def preview(request: Preview):
         requested = requirements(d.template, d.css)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
-    if d.sample in snapshot["fields"] and (requested is None or requested['compatibility'] or requested['identity'] or requested['card'] or requested['address']):
+    if d.sample in snapshot["fields"] and (requested is None or requested['compatibility'] or requested['identity'] or requested['card'] or requested['address'] or 'identity_source' in requested['names']):
         try:
             person = {**person, **metadata(snapshot["fields"][d.sample], snapshot["types"][d.sample])}
         except (OSError, ValueError) as exc:
@@ -558,6 +774,9 @@ def preview(request: Preview):
         person = {key: person[key] for key in ("id", "record_id", "name", "dataset", "source_id", "photo_url") if key in person}
     return {**result, "person": person, "context": context_summary}
 
+
+exporter = Exporter(database, load_bundle, lambda: catalog, Path(os.getenv("CARD_EXPORT_ROOT", DATA / "exports")), records_root)
+app.include_router(exporter.router)
 
 app.mount("/backgrounds", StaticFiles(directory=ROOT.parent / "backgrounds"))
 app.mount("/", StaticFiles(directory=ROOT / "web/dist", html=True))

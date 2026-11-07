@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from backend.photo_dataset import photo_index
 
 _app_data = tempfile.TemporaryDirectory()
-with patch.dict(os.environ, {"CARD_DATA": _app_data.name, "CARD_PHOTO_DATASET": "", "DS": "", "CARD_PHOTOS": ""}):
+with patch.dict(os.environ, {"CARD_DATA": _app_data.name, "CARD_RECORDS": os.path.join(_app_data.name, "records"), "CARD_PHOTO_DATASET": "", "DS": "", "CARD_PHOTOS": ""}):
     from backend import app as service
 
 
@@ -102,7 +102,6 @@ class DatasetSourcesTest(unittest.TestCase):
                     pending = service.datasets()
                     self.assertEqual(pending[0]["reference"], str(root))
                     self.assertTrue(pending[0]["loading"])
-                    self.assertEqual(service.designs(), [])
                     release.set()
                     await asyncio.to_thread(service.app.state.dataset_thread.join, 2)
                     self.assertFalse(service.dataset_status()["loading"])
