@@ -11,7 +11,7 @@ class TemplateCatalogTest(unittest.TestCase):
         for item in items:
             self.assertGreater(item['height'], item['width']) if item['kind']=='vertical_card' else self.assertGreater(item['width'], item['height'])
             self.assertEqual(sorted((item['width'],item['height'])),[850,1350])
-            self.assertEqual(item['variation_version'], 3 if item['id'] in ('A-left', 'A-right') else 2)
+            self.assertEqual(item['variation_version'], 2 if item['id'].startswith('GA-') else 3)
             source = service.open_template(item['id'])
             self.assertNotIn('/ds/', source['template'])
             self.assertIn('assets.', source['template'])

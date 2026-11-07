@@ -1,12 +1,3 @@
-{% if variation.font_family is defined %}
-@font-face {
-  font-family: "{{ variation.font_family }}";
-  src: url("{{ card_font.url }}") format("truetype");
-  font-weight: {{ card_font.weight }};
-}
-.card { font-family: "{{ variation.font_family }}", Arial, sans-serif; }
-{% endif %}
-
 /* A: a full-height portrait and a balanced identity column. */
 .identity-details {
   display: grid;

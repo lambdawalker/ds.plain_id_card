@@ -1,3 +1,12 @@
+{% if variation.font_family is defined %}
+@font-face {
+  font-family: "{{ variation.font_family }}";
+  src: url("{{ card_font.url }}") format("truetype");
+  font-weight: {{ card_font.weight }};
+}
+.card { font-family: "{{ variation.font_family }}", Arial, sans-serif; }
+{% endif %}
+
 /* Card-scale typography and common aligned field primitives. */
 html, body {
   margin: 0;

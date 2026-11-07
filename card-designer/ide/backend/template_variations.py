@@ -1,7 +1,7 @@
 """Versioned small variations; structural layout is always an explicit template."""
 import random
 
-from .card_fonts import horizontal_font_family
+from .card_fonts import card_font_family
 
 SCHEMA_V1 = {'margin': [24, 32], 'font_size': [25, 28], 'label_size': [15, 17],
              'field_gap': [10, 14], 'column_gap': [28, 36], 'header_gap': [20, 26],
@@ -33,7 +33,7 @@ def variation_schema(template_id, version=2):
 def resolve_parameters(template_id, seed, version=2):
     if template_id not in TEMPLATE_IDS:
         return None
-    if version not in (1, 2) and not (version == 3 and template_id in ('A-left', 'A-right')):
+    if version not in (1, 2, 3):
         raise ValueError(f'Unsupported template variation version: {version}')
     # Version 3 adds a separate font choice to the existing version 2 styles.
     style_version = 2 if version == 3 else version
@@ -45,7 +45,7 @@ def resolve_parameters(template_id, seed, version=2):
     if style_version == 2:
         values['photo_background'] = rng.choice(('transparent','rgba(255,255,255,0.55)','#ffffff'))
     if version == 3:
-        values['font_family'] = horizontal_font_family(template_id, seed)
+        values['font_family'] = card_font_family(template_id, seed)
     return {'version': version, 'seed': seed, 'template_id': template_id, **values}
 
 
