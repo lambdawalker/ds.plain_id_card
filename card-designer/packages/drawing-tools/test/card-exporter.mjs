@@ -32,23 +32,23 @@ try {
   const back = await api('bundles','POST',{name:tag+' back',layouts:[template('Back','Ada')]});
   designerIds.push(front.id, back.id);
   await page.goto(base);
-  await button('Card Exporter').click();
+  await button('Export').click();
   await button('＋ Add layout').click();
   await button('＋ Add layout').click();
   const first = page.getByRole('group',{name:'Layout 1'});
   const second = page.getByRole('group',{name:'Layout 2'});
-  await first.getByLabel('Designer bundle').selectOption(String(front.id));
-  await second.getByLabel('Designer bundle').selectOption(String(back.id));
+  await first.getByLabel('Design bundle').selectOption(String(front.id));
+  await second.getByLabel('Design bundle').selectOption(String(back.id));
   await first.getByLabel('Output name').fill('front');
   await second.getByLabel('Output name').fill('back');
   await page.getByLabel('Bundle name').fill(tag);
   await button('Save bundle').click();
-  await button('New session').click();
-  const dialog = page.getByRole('dialog',{name:'New session'});
-  await dialog.getByLabel('Session name').fill(tag+' session');
+  await button('New export session').click();
+  const dialog = page.getByRole('dialog',{name:'New export session'});
+  await dialog.getByLabel('Export session name').fill(tag+' session');
   await dialog.getByLabel('Record source').selectOption('none');
   await dialog.getByLabel('Instances').fill('5');
-  await dialog.getByRole('button',{name:'Create session'}).click();
+  await dialog.getByRole('button',{name:'Create export session'}).click();
   await button('Preview one instance').click();
   const previewTabs = page.getByRole('tablist',{name:'Instance preview'});
   const yamlTab = previewTabs.getByRole('tab',{name:'Expected OCR YAML'});
@@ -67,7 +67,7 @@ try {
 
   await api('bundles/'+front.id,'PUT',{...front,layouts:[{...front.layouts[0],...template('Front','Changed')}]});
   const secondSession = await api('export/sessions','POST',{
-    name:tag+' second', bundle_id:exportId, source:'none', count:1, seed:99, folder:'second-'+Date.now()
+    name:tag+' second', bundle_id:exportId, source:'none', count:1, seed:99, image_format:'jpeg', folder:'second-'+Date.now()
   });
   assert.notEqual(firstSession.output_path,secondSession.output_path);
 
@@ -78,6 +78,7 @@ try {
   const complete = await waitForSession(firstSession.id,'complete');
   assert.equal(complete.completed,5);
   await button('Open output').click();
+  await yamlTab.click();
   await page.getByRole('link',{name:'expected-ocr.yaml',exact:true}).waitFor();
   const prefix = base+'/api/export/sessions/'+firstSession.id+'/instances/1';
   const listing = await (await page.request.get(prefix)).json();
@@ -96,6 +97,41 @@ try {
   await waitForSession(secondSession.id,'complete');
   const secondOcr = await (await page.request.get(base+'/api/export/sessions/'+secondSession.id+'/instances/1/expected-ocr.yaml')).text();
   assert.match(secondOcr,/NAME: Changed/);
+  const jpeg = await page.request.get(base+'/api/export/sessions/'+secondSession.id+'/instances/1/front.jpg');
+  assert.equal(jpeg.headers()['content-type'],'image/jpeg');
+  assert.deepEqual([...((await jpeg.body()).subarray(0,3))],[255,216,255]);
+  await button('Open export session').click();
+  await page.getByRole('dialog',{name:'Open export session'}).getByRole('button',{name:new RegExp(tag+' second')}).click();
+  await button('Open output').click();
+  await previewTabs.getByRole('tab',{name:'front.jpg'}).click();
+  await page.getByRole('img',{name:'front.jpg'}).waitFor();
+  page.once('dialog', dialog=>dialog.accept());
+  await button('Rerun export session').click();
+  const rerun = await waitForSession(secondSession.id,'complete');
+  assert.notEqual(rerun.output_path,secondSession.output_path);
+  await button('Edit export session settings').click();
+  const edit = page.getByRole('dialog',{name:'Edit export session'});
+  await edit.getByLabel('Card images').uncheck();
+  await edit.getByLabel('YOLO labels and class map').uncheck();
+  await edit.getByLabel('Expected OCR YAML').uncheck();
+  await edit.getByLabel('Starting seed').fill('100');
+  await edit.getByRole('button',{name:'Save settings'}).click();
+  const edited = await waitForSession(secondSession.id,'draft');
+  assert.equal(edited.seed,100);
+  assert.notEqual(edited.output_path,rerun.output_path);
+  await button('Preview one instance').click();
+  await previewTabs.getByRole('tab',{name:'Expected Card Capture JSON'}).waitFor();
+  assert.equal(await previewTabs.getByRole('tab').count(),1);
+  await button('Start').click();
+  await waitForSession(secondSession.id,'complete');
+  const editedPrefix = 'export/sessions/'+secondSession.id+'/instances/1';
+  assert.deepEqual((await api(editedPrefix)).files,['expected-card-capture.json']);
+  assert.equal((await page.request.get(base+'/api/'+editedPrefix+'/front.jpg')).status(),404);
+  page.once('dialog', dialog=>dialog.accept());
+  await button('Delete export session').click();
+  await edit.waitFor({state:'hidden'});
+  await page.getByRole('heading',{name:tag+' second',exact:true}).waitFor({state:'detached'});
+  assert.ok(!(await api('export/sessions')).some(item=>item.id===secondSession.id));
   console.log('PASS: cross-bundle pairing, preview, pause/resume, instance files and independent session snapshots');
 } finally {
   if(exportId) await api('export/bundles/'+exportId,'DELETE');

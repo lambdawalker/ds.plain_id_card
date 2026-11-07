@@ -424,8 +424,8 @@
 </script>
 <svelte:window on:resize={positionSettings} on:keydown={key} on:beforeunload={e=>{if(ready&&dirty){e.preventDefault();e.returnValue=''}}}/>
 <header class="top"><strong><i>▧</i> Card Designer</strong><span class="tag">STUDIO</span>
-<button class:active={workspace==='designer'} aria-pressed={workspace==='designer'} disabled={busy} on:click={()=>workspace='designer'}>Designer</button>
-<button class:active={workspace==='exporter'} aria-pressed={workspace==='exporter'} disabled={busy} on:click={()=>{workspace='exporter';exporterOpened=true;}}>Card Exporter</button>
+<button class:active={workspace==='designer'} aria-pressed={workspace==='designer'} disabled={busy} on:click={()=>workspace='designer'}>Design</button>
+<button class:active={workspace==='exporter'} aria-pressed={workspace==='exporter'} disabled={busy} on:click={()=>{workspace='exporter';exporterOpened=true;}}>Export</button>
 {#if workspace==='designer'}
 <button class="icon-button" title="New bundle" aria-label="New bundle" disabled={busy} on:click={()=>act(newBundle)}><Icon name="new"/></button>
 <button class="icon-button open-templates" title="Open bundles" aria-label="Open bundles" disabled={busy} on:click={showTemplates}><Icon name="open"/></button>

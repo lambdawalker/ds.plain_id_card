@@ -10,13 +10,14 @@ from random import Random
 from tempfile import TemporaryDirectory
 from threading import BoundedSemaphore, Event, Lock, Thread
 from typing import Literal
+from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from .record_files import JsonRecords, legacy_sequence
-from .export_files import CAPTURE_JSON, class_names, expected_files, preview_instance, render_instance, renderer
+from .record_files import JsonRecords, atomic_write, legacy_sequence
+from .export_files import CAPTURE_JSON, DEFAULT_OUTPUTS, class_names, expected_files, instance_view, preview_instance, render_instance, renderer
 
 logger = logging.getLogger(__name__)
 SAFE_NAME = r"^[A-Za-z0-9][A-Za-z0-9_-]*$"
@@ -34,6 +35,19 @@ class ExportBundle(BaseModel):
     layouts: list[LayoutReference] = Field(min_length=1, max_length=16)
 
 
+class ExportOutputs(BaseModel):
+    images: bool = True
+    yolo: bool = True
+    ocr: bool = True
+    card_capture: bool = True
+
+    @model_validator(mode="after")
+    def require_output(self):
+        if not any(self.model_dump().values()):
+            raise ValueError("Select at least one output file type")
+        return self
+
+
 class SessionRequest(BaseModel):
     name: str = Field(min_length=1, max_length=160, pattern=r"\S")
     bundle_id: int = Field(gt=0)
@@ -41,6 +55,8 @@ class SessionRequest(BaseModel):
     count: int = Field(ge=1, le=100000)
     seed: int = Field(ge=0, lt=2**32)
     folder: str = Field(max_length=80, pattern=SAFE_NAME)
+    image_format: Literal["png", "jpeg"] = "png"
+    outputs: ExportOutputs = Field(default_factory=ExportOutputs)
 
 
 class SnapshotLayout(LayoutReference):
@@ -82,6 +98,9 @@ class Exporter:
             ("/bundles/{key}", "PUT", self.update_bundle), ("/bundles/{key}", "DELETE", self.delete_bundle),
             ("/bundles/{key}/clone", "POST", self.clone_bundle), ("/sources", "GET", self.sources),
             ("/sessions", "GET", self.sessions), ("/sessions", "POST", self.create_session),
+            ("/sessions/{key}", "DELETE", self.delete_session),
+            ("/sessions/{key}", "PUT", self.update_settings),
+            ("/sessions/{key}/rerun", "POST", self.rerun),
             ("/sessions/{key}/preview", "POST", self.preview),
             ("/sessions/{key}/start", "POST", self.start), ("/sessions/{key}/pause", "POST", self.pause),
             ("/sessions/{key}/instances/{index}", "GET", self.instance),
@@ -236,48 +255,89 @@ class Exporter:
                 return index - 1
         return recorded
 
+    def session_snapshot(self, settings, previous=None):
+        if previous and previous["bundle_id"] == settings.bundle_id:
+            layouts, bundle_name = previous["layouts"], previous["bundle_name"]
+        else:
+            bundle = ExportBundle.model_validate(self.bundle_records.load(settings.bundle_id))
+            layouts, bundle_name = self.resolve_layouts(bundle), bundle.name
+        if previous and previous["source"] == settings.source:
+            samples = previous["samples"]
+            if previous["seed"] != settings.seed:
+                samples = sorted(samples)
+                Random(settings.seed).shuffle(samples)
+        else:
+            samples = []
+            if settings.source != "none":
+                samples = sorted(record["id"] for record in self.catalog()["records"].values()
+                                 if (str(record.get("source_id")) if record.get("source_id") is not None else "loose") == settings.source)
+                if not samples:
+                    raise HTTPException(422, "This record source has no available records")
+                Random(settings.seed).shuffle(samples)
+        return {**settings.model_dump(), "bundle_name": bundle_name, "samples": samples,
+                "layouts": layouts, "classes": class_names(layouts),
+                "status": "draft", "completed": 0, "error": ""}
+
+    def save_draft(self, key, session, previous=None):
+        folder = self.output_folder(session)
+        same_folder = previous is not None and previous["folder"].casefold() == session["folder"].casefold()
+        if not same_folder and any(
+            other != key and self.load_session(other)["folder"].casefold() == session["folder"].casefold()
+            for other in self.session_records.keys()
+        ):
+            raise HTTPException(409, "Choose a different output folder")
+        if not same_folder:
+            self.create_output_folder(folder)
+        try:
+            self.session_records.write(key, session)
+        except Exception:
+            if not same_folder:
+                folder.rmdir()
+            raise
+        return self.session_summary(key, session)
+
     def create_session(self, settings: SessionRequest):
         validate_filename(settings.folder)
-        samples = []
-        if settings.source != "none":
-            samples = sorted(record["id"] for record in self.catalog()["records"].values()
-                             if (str(record.get("source_id")) if record.get("source_id") is not None else "loose") == settings.source)
-            if not samples:
-                raise HTTPException(422, "This record source has no available records")
-            Random(settings.seed).shuffle(samples)
-        folder = self.root / settings.folder
         with self.writes():
-            records = self.session_records
-            bundle = ExportBundle.model_validate(self.bundle_records.load(settings.bundle_id))
-            layouts = self.resolve_layouts(bundle)
-            session = {**settings.model_dump(), "bundle_name": bundle.name, "samples": samples,
-                       "layouts": layouts, "classes": class_names(layouts),
-                       "status": "draft", "completed": 0, "error": ""}
-            if any(self.load_session(key)["folder"].casefold() == settings.folder.casefold() for key in records.keys()):
-                raise HTTPException(409, "Choose a different output folder")
-            self.create_output_folder(folder, session["classes"])
-            try:
-                key = records.reserve()
-                records.write(key, session)
-                result = self.session_summary(key, session)
-            except Exception:
-                (folder / "classes.txt").unlink(missing_ok=True)
-                folder.rmdir()
-                raise
-        return result
+            session = self.session_snapshot(settings)
+            return self.save_draft(self.session_records.reserve(), session)
 
-    def create_output_folder(self, folder, classes):
+    def update_settings(self, key: int, settings: SessionRequest):
+        validate_filename(settings.folder)
+        with self.lock, self.writes():
+            previous = self.load_session(key)
+            if key in self.workers or previous["status"] in ("running", "pausing"):
+                raise HTTPException(409, "Pause the export session before editing its settings")
+            if all(previous[field] == value for field, value in settings.model_dump(exclude={"name"}).items()):
+                previous["name"] = settings.name
+                self.session_records.write(key, previous)
+                return self.session_summary(key, previous)
+            if previous["folder"].casefold() == settings.folder.casefold():
+                if previous["status"] != "draft":
+                    suffix = "-edit-" + uuid4().hex[:12]
+                    settings.folder = settings.folder[:80-len(suffix)] + suffix
+                else:
+                    settings.folder = previous["folder"]
+            session = self.session_snapshot(settings, previous)
+            return self.save_draft(key, session, previous)
+
+    def create_output_folder(self, folder):
         self.root.mkdir(parents=True, exist_ok=True)
         try:
             folder.mkdir()
         except FileExistsError as exc:
             raise HTTPException(409, "Output folder already exists") from exc
-        try:
-            (folder / "classes.txt").write_text("\n".join(classes) + "\n", encoding="utf-8")
-        except Exception:
-            (folder / "classes.txt").unlink(missing_ok=True)
-            folder.rmdir()
-            raise
+
+    def write_class_map(self, folder, session):
+        if folder.is_symlink() or not folder.is_dir():
+            raise HTTPException(409, "The output folder is unavailable")
+        path = folder / "classes.txt"
+        if path.is_symlink():
+            raise HTTPException(409, "The class map cannot be a symbolic link")
+        if session["outputs"]["yolo"]:
+            atomic_write(path, "\n".join(session["classes"]) + "\n")
+        else:
+            path.unlink(missing_ok=True)
 
     @staticmethod
     def origin(request):
@@ -297,22 +357,50 @@ class Exporter:
             self.browser_slots.release()
 
     def start(self, key: int, request: Request):
-        origin = self.origin(request)
+        return self.launch(key, self.origin(request), rerun=False)
+
+    def rerun(self, key: int, request: Request):
+        return self.launch(key, self.origin(request), rerun=True)
+
+    def delete_session(self, key: int):
+        with self.lock, self.writes():
+            session = self.load_session(key)
+            if key in self.workers or session["status"] in ("running", "pausing"):
+                raise HTTPException(409, "Pause the export session before deleting it")
+            self.session_records.path(key).unlink()
+        return {"deleted": key}
+
+    def launch(self, key, origin, *, rerun):
         with self.lock:
             with self.writes():
                 records = self.session_records
                 session = self.load_session(key)
+                if key in self.workers or session["status"] in ("running", "pausing"):
+                    raise HTTPException(409, "The export session is already running")
+                if rerun:
+                    if session["status"] == "draft":
+                        raise HTTPException(409, "Start this export session first")
+                    suffix = "-rerun-" + uuid4().hex[:12]
+                    session["folder"] = session["folder"].split("-rerun-")[0][:80-len(suffix)] + suffix
+                    completed = 0
                 folder = self.output_folder(session)
-                missing_output = not folder.exists() and not folder.is_symlink()
-                completed = self.local_progress(folder, session["completed"])
-                resumable = session["status"] in ("draft", "paused", "failed")
-                incomplete = session["status"] == "complete" and completed < session["completed"]
-                if key in self.workers or not (resumable or incomplete):
-                    raise HTTPException(409, "This session cannot be started right now")
-                if missing_output:
-                    self.create_output_folder(folder, session["classes"])
-                session.update(status="running", error="", completed=completed)
-                records.write(key, session)
+                if not rerun:
+                    completed = self.local_progress(folder, session["completed"])
+                    if session["status"] == "complete" and completed == session["completed"]:
+                        raise HTTPException(409, "This export session is already complete")
+                created = rerun or (not folder.exists() and not folder.is_symlink())
+                if created:
+                    self.create_output_folder(folder)
+                try:
+                    if created or session["status"] == "draft":
+                        self.write_class_map(folder, session)
+                    session.update(status="running", error="", completed=completed)
+                    records.write(key, session)
+                except Exception:
+                    if created:
+                        (folder / "classes.txt").unlink(missing_ok=True)
+                        folder.rmdir()
+                    raise
                 result = self.session_summary(key, session)
             stop = Event()
             worker = Thread(target=self.run, args=(key, origin, stop), name=f"card-export-{key}", daemon=True)
@@ -346,7 +434,7 @@ class Exporter:
         indices = iter(range(completed, session["count"]))
         finished = set()
         progress_lock = Lock()
-        expected = expected_files(session["layouts"])
+        expected = expected_files(session["layouts"], session.get("image_format", "png"), session.get("outputs", DEFAULT_OUTPUTS))
 
         def stop_on_error(exc_type, _exc, _traceback):
             if exc_type is not None:
@@ -371,8 +459,9 @@ class Exporter:
                         target = folder / f"{index+1:06d}"
                         if target.exists() or target.is_symlink():
                             # A restart can land between publication and the progress update.
-                            if (target.is_symlink() or not target.is_dir()
-                                    or {path.name for path in target.iterdir()} | {CAPTURE_JSON} != expected
+                            actual = {path.name for path in target.iterdir()} if target.is_dir() and not target.is_symlink() else set()
+                            if ((actual != expected and actual != expected - {CAPTURE_JSON})
+                                    or not actual
                                     or any(path.is_symlink() or not path.is_file() or not path.stat().st_size
                                            for path in target.iterdir())):
                                 raise ValueError(f"Incomplete existing instance {target.name}. Move it aside and resume.")
@@ -414,7 +503,8 @@ class Exporter:
             if folder.is_symlink() or not folder.is_dir():
                 raise ValueError("The original output folder is unavailable")
             class_file = folder / "classes.txt"
-            if class_file.is_symlink() or class_file.read_text(encoding="utf-8").splitlines() != session["classes"]:
+            if session["outputs"]["yolo"] and (class_file.is_symlink()
+                    or class_file.read_text(encoding="utf-8").splitlines() != session["classes"]):
                 raise ValueError("The session class map has changed")
             if self.render_batch(key, origin, session, folder, stop) < session["count"]:
                 status = "paused"
@@ -433,17 +523,22 @@ class Exporter:
         folder = self.output_folder(payload) / f"{index:06d}"
         if folder.resolve() != folder or not folder.is_dir():
             raise HTTPException(404, "Instance folder is not available")
-        filenames = expected_files(payload["layouts"])
+        filenames = expected_files(payload["layouts"], payload["image_format"], payload["outputs"])
         if not (folder / CAPTURE_JSON).is_file():
-            filenames.remove(CAPTURE_JSON)
-        return folder, filenames
+            filenames.discard(CAPTURE_JSON)
+        return folder, filenames, payload
 
     def instance(self, key: int, index: int):
-        folder, filenames = self.instance_path(key, index)
-        return {"path": str(folder), "files": sorted(filenames)}
+        folder, filenames, payload = self.instance_path(key, index)
+        prefix = f"/api/export/sessions/{key}/instances/{index}/"
+        try:
+            view = instance_view(folder, payload, lambda name: prefix + name)
+        except (OSError, UnicodeError) as exc:
+            raise HTTPException(404, "Instance annotations are unavailable") from exc
+        return {"path": str(folder), "files": sorted(filenames), **view}
 
     def file(self, key: int, index: int, filename: str):
-        folder, filenames = self.instance_path(key, index)
+        folder, filenames, _ = self.instance_path(key, index)
         path = folder / filename
         if filename not in filenames or path.is_symlink() or not path.is_file():
             raise HTTPException(404, "Export file is not available")
