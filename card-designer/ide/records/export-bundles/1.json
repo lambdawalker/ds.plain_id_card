@@ -1,0 +1,15 @@
+{
+  "name": "Georgia",
+  "layouts": [
+    {
+      "bundle_id": 8,
+      "layout_id": "stock-GA-front",
+      "stem": "layout-1"
+    },
+    {
+      "bundle_id": 8,
+      "layout_id": "stock-GA-back",
+      "stem": "layout-2"
+    }
+  ]
+}

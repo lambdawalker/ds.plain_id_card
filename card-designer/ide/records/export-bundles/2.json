@@ -1,0 +1,10 @@
+{
+  "name": "Test",
+  "layouts": [
+    {
+      "bundle_id": 1,
+      "layout_id": "stock-A-left",
+      "stem": "layout-1"
+    }
+  ]
+}
